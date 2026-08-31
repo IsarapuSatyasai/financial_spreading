@@ -21,57 +21,174 @@ def build_hyperlink(page_number: Optional[int], source_link: str) -> str:
         return f'=HYPERLINK("{source_link}#page={page_number}", "Page {page_number}")'
     return "N/A"
 
+def build_keyword_context(
+    keyword_contexts: list[dict],
+    selected_pages: list[dict],
+) -> str:
+    """
+    Build LLM context from keyword matches.
+
+    If no keyword is found for a metric, fall back
+    to the selected PDF pages.
+    """
+
+    sections = []
+
+    for metric in keyword_contexts:
+
+        variable = metric.get("variable", "")
+        matches = metric.get("matches", [])
+
+        sections.append(
+            f"===== Variable: {variable} ====="
+        )
+
+        if matches:
+
+            seen_contexts = set()
+
+            for match in matches:
+
+                context = match.get(
+                    "context",
+                    ""
+                ).strip()
+
+                page_number = match.get("page_number","")
+
+                keyword = match.get("keyword","")
+
+                if not context:
+                    continue
+
+                if context in seen_contexts:
+                    continue
+
+                seen_contexts.add(context)
+
+                sections.append(
+                    f"\n--- Page {page_number} | "
+                    f"Keyword: {keyword} ---\n"
+                    f"{context}"
+                )
+
+        else:
+
+            sections.append(
+                "No keyword match found. "
+                "Fallback to selected PDF pages."
+            )
+
+            for index, page in enumerate(selected_pages):
+
+                page_number = page.get(
+                    "page_number",
+                    page.get("page",index + 1)
+                )
+
+                page_text = page.get("text","")
+
+                sections.append(
+                    f"\n--- Page {page_number} ---\n"
+                    f"{page_text}"
+                )
+
+    return "\n".join(sections)
 
 def answer_questions(state: FinancialGraphState) -> dict:
-    """Extract metrics via LLM and enrich each answer with an Excel hyperlink."""
+    """
+    Extract metrics via LLM using keyword-focused PDF context.
+    """
+
     llm = state.get("llm")
+
+    if llm is None:
+        return {
+            "answers": [],
+            "errors": ["LLM is missing from graph state"]
+        }
+
     structured_llm = llm.with_structured_output(ExtractionResponse)
 
     excel_data = state.get("excel_data", [])
     errors = state.get("errors", [])
-    selected_pages = state.get("selected_pages", [])
+    keyword_contexts = state.get("keyword_contexts", [])
     pdf_file_name = state.get("pdf_file_name", "")
-  
+
     settings = get_settings()
-    source_link = settings.sharepoint_link + pdf_file_name.replace(" ", "%20")
 
+    sharepoint_link = settings.sharepoint_link
 
-    USER_PROMPT = get_user_prompt(excel_data)
-    
-    full_context = "\n\n".join(
-        [f"--- Page {i+1} ---\n{page.get('text', '')}" for i, page in enumerate(selected_pages)]
+    source_link = (
+        sharepoint_link
+        + pdf_file_name.replace(" ", "%20")
     )
 
+    USER_PROMPT = get_user_prompt(excel_data)
+    selected_pages = state.get(
+    "selected_pages",
+     []
+    ) 
+
+    keyword_contexts = state.get(
+       "keyword_contexts",
+        []
+    )
+
+    # Use keyword-focused context
+    full_context = build_keyword_context(keyword_contexts)
+
     user_content = (
-        f"Please extract the following variables:\n{USER_PROMPT}\n\n"
-        f"Document context:\n{full_context}\n\n"
+        f"Please extract the following variables:\n"
+        f"{USER_PROMPT}\n\n"
+        f"Relevant document context:\n"
+        f"{full_context}\n"
     )
 
     messages = [
-        SystemMessage(content=SYSTEM_PROMPT), 
-        HumanMessage(content=user_content)
+        SystemMessage(
+            content=SYSTEM_PROMPT
+        ),
+        HumanMessage(
+            content=user_content
+        )
     ]
-    
+
     try:
-        response: ExtractionResponse = structured_llm.invoke(messages)
-        
+
+        response: ExtractionResponse = (
+            structured_llm.invoke(messages)
+        )
+
         if errors:
             response.errors.extend(errors)
-            
+
         final_answers = []
-        
+
         for answer in response.answers:
-            answer.source_link = build_hyperlink(answer.page_number, source_link)
-            final_answers.append(answer.model_dump())
-            
+
+            answer.source_link = build_hyperlink(
+                answer.page_number,
+                source_link
+            )
+
+            final_answers.append(
+                answer.model_dump()
+            )
+
         return {
-            "answers": final_answers, 
+            "answers": final_answers,
             "errors": response.errors
         }
-        
+
     except Exception as e:
-        error_msg = f"Bulk LLM extraction error: {str(e)}"
+
+        error_msg = (
+            f"Bulk LLM extraction error: {str(e)}"
+        )
+
         errors.append(error_msg)
+
         return {
             "answers": [],
             "errors": errors

@@ -60,6 +60,9 @@ class FinancialGraphState(TypedDict, total=False):
 
     #Selected pages for extraction
     selected_pages: List[Dict[str, Any]]
+
+    # Keyword-based relevant contexts extracted from selected PDF pages
+    keyword_contexts: List[Dict[str, Any]]
     
     # #Extracted tables from the PDF document
     # tables: List[Dict[str, Any]]

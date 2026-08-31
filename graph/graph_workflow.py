@@ -47,6 +47,7 @@ from nodes.read_creditlens_template import read_creditlens_template
 from nodes.annual_report_parser import annual_report_parser
 from nodes.source_language import source_language
 from nodes.select_pages import select_pages
+from nodes.keyword_search import keyword_search
 from nodes.connect_llm import connect_llm
 from nodes.answer_questions import answer_questions
 from nodes.create_excel_output import create_excel_output
@@ -70,6 +71,7 @@ def build_graph():
     workflow.add_node("annual_report_parser", annual_report_parser)
     workflow.add_node("source_language", source_language)
     workflow.add_node("select_pages", select_pages)
+    workflow.add_node("keyword_search", keyword_search)
     workflow.add_node("connect_llm", connect_llm)
     workflow.add_node("answer_questions", answer_questions)
     workflow.add_node("create_excel_output", create_excel_output)
@@ -85,7 +87,9 @@ def build_graph():
     workflow.add_edge("read_creditlens_template", "annual_report_parser")
     workflow.add_edge("annual_report_parser", "source_language")
     workflow.add_edge("source_language", "select_pages")
-    workflow.add_edge("select_pages", "connect_llm")
+    #workflow.add_edge("select_pages", "connect_llm")
+    workflow.add_edge("select_pages", "keyword_search")
+    workflow.add_edge("keyword_search", "connect_llm")
     workflow.add_edge("connect_llm", "answer_questions")
     workflow.add_edge("answer_questions", "create_excel_output")
     workflow.add_edge("create_excel_output", "complete")
