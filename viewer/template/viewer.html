@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>Financial Spreading - Source Viewer</title>
+
+    <style>
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .toolbar {
+            height: 55px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            padding: 0 20px;
+            background: #222;
+            color: white;
+        }
+
+        .keyword {
+            font-weight: bold;
+        }
+
+        iframe {
+            width: 100%;
+            height: calc(100vh - 55px);
+            border: none;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+    <div class="toolbar">
+
+        <span>
+            PDF:
+            {{ pdf_name }}
+        </span>
+
+        <span>
+            Page:
+            {{ page }}
+        </span>
+
+        {% if keyword %}
+
+        <span class="keyword">
+            Keyword:
+            {{ keyword }}
+        </span>
+
+        {% endif %}
+
+    </div>
+
+
+    <iframe
+        src="/pdf/{{ pdf_name }}#page={{ page }}"
+    >
+    </iframe>
+
+
+</body>
+
+</html>

@@ -205,9 +205,11 @@ def keyword_search(state: FinancialGraphState) -> dict:
                             "page_number": page_number,
                             "keyword": match["keyword"],
                             "context": match["context"],
+                            "start": match["start"],
+                            "end": match["end"],
                         }
+                        
                     )
-
         keyword_contexts.append(
             {
                 "variable": variable,

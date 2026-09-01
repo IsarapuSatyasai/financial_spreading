@@ -1,0 +1,6 @@
+.python-version
+.venv
+uv.lock
+pyproject.toml
+data/CL Adyen NV_Jurgen Geerts.pdf
+requirements.txt
