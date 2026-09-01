@@ -3,20 +3,12 @@
 import pandas as pd
 import os
 
-# from databricks.sd    k.runtime import dbutils
+from databricks.sdk.runtime import dbutils
 import tempfile
 
 import openpyxl
 from openpyxl.styles import Font, Border, Side, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
-
-import shutil
-
-if os.path.exists(temp_file_path):
-    shutil.copy2(
-        temp_file_path,
-        output_path
-    )
 
 def excel_write(dataframes:dict[str, pd.DataFrame], output_path:str, overwrite: bool= False) -> str:
     """

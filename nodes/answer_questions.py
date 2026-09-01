@@ -13,7 +13,6 @@ from prompts.user_prompt import get_user_prompt
 from models import ExtractionResponse
 
 from config import get_settings
-from pathlib import Path
 
 
 def build_hyperlink(page_number: Optional[int], source_link: str) -> str:
@@ -23,8 +22,9 @@ def build_hyperlink(page_number: Optional[int], source_link: str) -> str:
     return "N/A"
 
 def build_keyword_context(
-    keyword_contexts : List[Dict[str, Any]],
-    selected_pages: List[Dict[str, Any]]) -> str:
+    keyword_contexts: list[dict],
+    selected_pages: list[dict],
+) -> str:
     """
     Build LLM context from keyword matches.
 
@@ -33,7 +33,6 @@ def build_keyword_context(
     """
 
     sections = []
-    final_answers = []
 
     for metric in keyword_contexts:
 
@@ -119,14 +118,11 @@ def answer_questions(state: FinancialGraphState) -> dict:
     settings = get_settings()
 
     sharepoint_link = settings.sharepoint_link
-    
-    pdf_path = Path(state["pdf_source"]).resolve()
-    source_link = pdf_path.as_uri()
-    
-    # source_link = (
-        # sharepoint_link
-        # + pdf_file_name.replace(" ", "%20")
-    # )
+
+    source_link = (
+        sharepoint_link
+        + pdf_file_name.replace(" ", "%20")
+    )
 
     USER_PROMPT = get_user_prompt(excel_data)
     selected_pages = state.get(
@@ -140,7 +136,7 @@ def answer_questions(state: FinancialGraphState) -> dict:
     )
 
     # Use keyword-focused context
-    full_context = build_keyword_context(keyword_contexts, selected_pages)
+    full_context = build_keyword_context(keyword_contexts)
 
     user_content = (
         f"Please extract the following variables:\n"
@@ -160,7 +156,9 @@ def answer_questions(state: FinancialGraphState) -> dict:
 
     try:
 
-        response: ExtractionResponse = (structured_llm.invoke(messages))
+        response: ExtractionResponse = (
+            structured_llm.invoke(messages)
+        )
 
         if errors:
             response.errors.extend(errors)
@@ -173,9 +171,10 @@ def answer_questions(state: FinancialGraphState) -> dict:
                 answer.page_number,
                 source_link
             )
-            
-            answer_dict = answer.model_dump()
-            final_answers.append(answer_dict)
+
+            final_answers.append(
+                answer.model_dump()
+            )
 
         return {
             "answers": final_answers,
