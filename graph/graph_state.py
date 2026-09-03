@@ -69,6 +69,9 @@ class FinancialGraphState(TypedDict, total=False):
 
     #Extracted metrics for each Excel row
     answers: List[Dict[str, Any]]
+    
+    # Number of attempts allowed for confidence refinement
+    refinement_attempts: int
 
 
     # #*************Output******************
@@ -80,7 +83,6 @@ class FinancialGraphState(TypedDict, total=False):
     # final_answer: List[Dict[str, Any]]
 
     #Any errors encountered during execution
-    # This can be changed to Annotated[list, operator.add]
     errors: List[str]
 
     #Final check that all metrics have been extracted

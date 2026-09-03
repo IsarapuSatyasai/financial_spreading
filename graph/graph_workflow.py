@@ -50,6 +50,11 @@ from nodes.select_pages import select_pages
 from nodes.connect_llm import connect_llm
 from nodes.answer_questions import answer_questions
 from nodes.create_excel_output import create_excel_output
+#from nodes.confidence_refinement import confidence_refinement
+from nodes.confidence_refinement import (
+    confidence_refinement,
+    route_after_refinement,
+)
 
 def complete(state: FinancialGraphState) -> dict:
     return {"extraction_completed": True}
@@ -72,6 +77,7 @@ def build_graph():
     workflow.add_node("select_pages", select_pages)
     workflow.add_node("connect_llm", connect_llm)
     workflow.add_node("answer_questions", answer_questions)
+    workflow.add_node("confidence_refinement", confidence_refinement)
     workflow.add_node("create_excel_output", create_excel_output)
     workflow.add_node("complete", complete)
     # workflow.add_node("ingest_documents", ingest_documents)
@@ -87,7 +93,17 @@ def build_graph():
     workflow.add_edge("source_language", "select_pages")
     workflow.add_edge("select_pages", "connect_llm")
     workflow.add_edge("connect_llm", "answer_questions")
-    workflow.add_edge("answer_questions", "create_excel_output")
+    #workflow.add_edge("answer_questions", "create_excel_output")
+    workflow.add_edge("answer_questions", "confidence_refinement")
+    workflow.add_conditional_edges(
+      "confidence_refinement",
+       #confidence_refinement,
+       route_after_refinement,
+       {
+        "refine": "confidence_refinement",
+        "continue": "create_excel_output",
+       },
+    )
     workflow.add_edge("create_excel_output", "complete")
     # workflow.add_edge("ingest_documents", "load_document")
     # workflow.add_edge("load_document", "parse_document")

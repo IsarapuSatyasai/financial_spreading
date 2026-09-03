@@ -26,10 +26,6 @@ class ExtractedAnswer(BaseModel):
         default=None, 
         description="Formula used to calculate the answer based on source fields. Set to null if not applicable for e.g. in case of 1 to 1 mapping."
     )
-    source_link: str = Field(
-        default="N/A", 
-        description="Hyperlink formula pointing to the source PDF page. Populated post-extraction."
-    )
     
 
 class ExtractionResponse(BaseModel):

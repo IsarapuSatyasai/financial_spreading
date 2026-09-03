@@ -33,6 +33,7 @@ def answer_questions(state: FinancialGraphState) -> dict:
     pdf_file_name = state.get("pdf_file_name", "")
   
     settings = get_settings()
+    sharepoint_link = settings.sharepoint_link
     source_link = settings.sharepoint_link + pdf_file_name.replace(" ", "%20")
 
 
