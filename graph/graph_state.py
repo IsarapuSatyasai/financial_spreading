@@ -70,6 +70,15 @@ class FinancialGraphState(TypedDict, total=False):
     #Extracted metrics for each Excel row
     answers: List[Dict[str, Any]]
 
+    original_answers: List[Dict[str, Any]]
+
+    refined_answers: List[Dict[str, Any]]
+
+    verification_results: List[Dict[str, Any]]
+
+    # Number of attempts allowed for confidence refinement
+    refinement_attempts: int
+
 
     # #*************Output******************
 

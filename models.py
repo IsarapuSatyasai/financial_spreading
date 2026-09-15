@@ -13,7 +13,7 @@ class ExtractedAnswer(BaseModel):
     variable: str = Field(description="The name of the variable being extracted")
     answer: str = Field(description="The extracted value as given in the source document, or 'N/A' if not found")
     confidence: float = Field(
-        description="Confidence score between 0.0 and 1.0 based on how clearly the document states the value."
+        description="Confidence score between 0.0 and 1.0 based on how clearly the document states the value. It helps user to understand wether the metric is extracted, inferred, or ambiguous."
     )
     page_number: int = Field(
         description="The page number where the information was found. Set to -1 if not found."
@@ -51,6 +51,40 @@ class ExtractionResponse(BaseModel):
         description="List of extracted answers for all requested variables."
     )
     errors: List[str] = Field(default_factory=list)
+
+class VerificationResult(BaseModel):
+    variable: str = Field(
+        description="The variable being verified."
+    )
+    is_correct: bool = Field(
+        description="Whether the extracted answer is supported by the PDF."
+    )
+    verification_confidence: float = Field(
+        description="Confidence from 0.0 to 1.0 that the PDF supports the answer."
+    )
+    verified_value: str = Field(
+        description="The value supported by the PDF. Use 'N/A' if not found."
+    )
+    page_number: int = Field(
+        description="The relevant PDF page number. Use -1 if not found."
+    )
+    source_fields: List[str] = Field(
+        default_factory=list,
+        description="PDF fields supporting the answer."
+    )
+    formula: Optional[str] = Field(
+        default=None,
+        description="Formula used when the answer requires calculation."
+    )
+    reason: str = Field(
+        description="Short explanation of why the answer is correct or incorrect."
+    )
+
+
+class VerificationResponse(BaseModel):
+    results: List[VerificationResult] = Field(
+        default_factory=list
+    )
 
 # class ValidationResult(BaseModel):
 #     method: str = Field(description="Name of the validation method.")
