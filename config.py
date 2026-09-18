@@ -2,8 +2,6 @@
 Configration of paths and setup of environment variables for financial spreading project.
 Import this to main notebook to setup the openai and storage account.
 """
-REFINEMENT_CONFIDENCE_THRESHOLD = 0.70
-MAX_REFINEMENT_ATTEMPTS = 3
 
 import os
 from databricks.sdk.runtime import dbutils, spark

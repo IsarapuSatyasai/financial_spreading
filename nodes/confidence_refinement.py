@@ -1,283 +1,279 @@
+"""Refine and verify existing financial extractions."""
+
+from typing import Any, Dict, List
+
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from config import (
-    MAX_REFINEMENT_ATTEMPTS,
-    REFINEMENT_CONFIDENCE_THRESHOLD,
-)
+from config import get_settings
 from graph.graph_state import FinancialGraphState
-from models import ExtractionResponse, VerificationResponse
+from models import RefinementResponse
+from nodes.answer_questions import build_hyperlink
+from prompts.refinement_prompt import (
+    REFINEMENT_SYSTEM_PROMPT,
+    build_refinement_prompt,
+)
 
 
-REFINEMENT_PROMPT = """
-You are refining a financial extraction from an annual report.
-
-Use only the provided PDF evidence.
-
-Review the existing candidate and correct it only when the
-document provides sufficient evidence.
-
-Check:
-- correct metric or variable
-- correct numerical value
-- correct financial year
-- correct unit or scale
-- correct page
-- correct source fields
-- formula or calculation when applicable
-
-Do not invent information.
-Do not use information outside the provided PDF evidence.
-
-Return the best supported candidate extraction.
-"""
+MAX_REFINEMENT_ATTEMPTS = 2
 
 
-VERIFICATION_PROMPT = """
-You are verifying a financial extraction against an annual report.
-
-The PDF evidence is the source of truth.
-
-For the provided candidate, verify:
-
-1. Whether the numerical value is actually supported.
-2. Whether it belongs to the requested metric.
-3. Whether the financial year is correct.
-4. Whether the unit or scale is correct.
-5. Whether the cited page is correct.
-6. Whether the source fields support the extraction.
-7. Whether the formula/calculation is correct when applicable.
-8. Whether the surrounding PDF context supports the interpretation.
-
-Do not assume that a high confidence score means the answer is correct.
-
-Return is_correct=true only when the PDF evidence supports the
-candidate sufficiently.
-
-If the candidate is incorrect, identify the value supported by
-the PDF evidence when it can be determined.
-
-Do not invent information.
-"""
-
-
-def _build_pdf_context(selected_pages):
-    context = []
-
-    for page in selected_pages:
-        page_number = page.get("page_number")
-
-        if page_number is None:
-            page_number = page.get("page", -1)
-
-        text = page.get("text", "")
-
-        context.append(
-            f"--- PDF Page {page_number} ---\n{text}"
-        )
-
-    return "\n\n".join(context)
-
-
-def _refine_answer(llm, answer, pdf_context):
-    structured_llm = llm.with_structured_output(
-        ExtractionResponse
+def _metric_key(metric: Dict[str, Any]) -> tuple:
+    """Return the unique template key for a metric."""
+    return (
+        metric["worksheet"],
+        metric["variable"],
     )
 
-    messages = [
-        SystemMessage(content=REFINEMENT_PROMPT),
-        HumanMessage(
-            content=f"""
-Existing candidate:
 
-{answer}
-
-PDF evidence:
-
-{pdf_context}
-"""
-        ),
-    ]
-
-    response = structured_llm.invoke(messages)
-
-    if not response.answers:
-        return answer
-
-    return response.answers[0].model_dump()
+def _build_template_keys(
+    excel_data: List[Dict[str, Any]],
+) -> set:
+    """Build allowed metric keys from the template."""
+    return {
+        _metric_key(metric)
+        for metric in excel_data
+    }
 
 
-def _verify_answer(llm, answer, pdf_context):
-    structured_llm = llm.with_structured_output(
-        VerificationResponse
+def _build_pdf_context(
+    selected_pages: List[Dict[str, Any]],
+) -> str:
+    """Build PDF context for refinement."""
+    return "\n\n".join(
+        f'--- Page {page.get("page_number", index + 1)} ---\n'
+        f'{page.get("text", "")}'
+        for index, page in enumerate(selected_pages)
     )
 
-    messages = [
-        SystemMessage(content=VERIFICATION_PROMPT),
-        HumanMessage(
-            content=f"""
-Candidate extraction:
 
-{answer}
+def _select_metrics_for_refinement(
+    excel_data: List[Dict[str, Any]],
+    original_answers: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Select existing template metrics that need verification."""
 
-PDF evidence:
+    answer_map = {
+        _metric_key(answer): answer
+        for answer in original_answers
+    }
 
-{pdf_context}
-"""
-        ),
-    ]
+    metrics = []
 
-    response = structured_llm.invoke(messages)
+    for template_metric in excel_data:
+        key = _metric_key(template_metric)
+        answer = answer_map.get(key)
 
-    if not response.results:
-        return {
-            "variable": answer.get("variable", ""),
-            "is_correct": False,
-            "verification_confidence": 0.0,
-            "verified_value": "N/A",
-            "page_number": -1,
-            "source_fields": [],
-            "formula": None,
-            "reason": "Verification returned no result.",
+        if answer is None:
+            answer = {
+                "worksheet": template_metric["worksheet"],
+                "variable": template_metric["variable"],
+                "answer": "N/A",
+                "confidence": 0.0,
+                "page_number": -1,
+                "source_fields": [],
+                "formula": None,
+            }
+
+        metric = {
+            **template_metric,
+            **answer,
         }
 
-    return response.results[0].model_dump()
+        confidence = float(
+            metric.get("confidence", 0.0)
+        )
+
+        if confidence > 0:
+            metrics.append(metric)
+
+    return metrics
+
+
+def _normalize_answer(
+    answer: Dict[str, Any],
+    source_link: str,
+) -> Dict[str, Any]:
+    """Normalize refinement output."""
+
+    if not answer.get("answer"):
+        answer["answer"] = "N/A"
+
+    if answer["answer"] == "N/A":
+        answer["confidence"] = 0.0
+        answer["page_number"] = -1
+        answer["source_fields"] = []
+        answer["formula"] = None
+        answer["source_link"] = "N/A"
+
+        return answer
+
+    answer["source_link"] = build_hyperlink(
+        answer.get("page_number"),
+        source_link,
+    )
+
+    return answer
+
+
+def _merge_refined_answers(
+    excel_data: List[Dict[str, Any]],
+    original_answers: List[Dict[str, Any]],
+    refined_answers: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Merge refined values while preserving the template."""
+
+    original_map = {
+        _metric_key(answer): answer
+        for answer in original_answers
+    }
+
+    refined_map = {
+        _metric_key(answer): answer
+        for answer in refined_answers
+    }
+
+    final_answers = []
+
+    for template_metric in excel_data:
+        key = _metric_key(template_metric)
+
+        original = original_map.get(key, {})
+        refined = refined_map.get(key)
+
+        if refined and refined.get("is_supported"):
+            selected = {
+                **original,
+                **refined,
+            }
+        else:
+            selected = original.copy()
+
+        selected["worksheet"] = template_metric["worksheet"]
+        selected["variable"] = template_metric["variable"]
+
+        if not selected.get("answer"):
+            selected["answer"] = "N/A"
+
+        final_answers.append(selected)
+
+    return final_answers
 
 
 def confidence_refinement(
     state: FinancialGraphState,
 ) -> dict:
-    answers = state.get("answers", [])
-    attempts = state.get("refinement_attempts", 0)
-    original_answers = state.get("original_answers")
-
-    if original_answers is None:
-        original_answers = [answer.copy() for answer in answers]
+    """Run a maximum of two refinement attempts."""
 
     llm = state.get("llm")
 
     if llm is None:
-        raise ValueError("LLM is missing from graph state")
+        return {
+            "answers": state.get("original_answers", []),
+            "refined_answers": [],
+            "errors": state.get("errors", []) + [
+                "LLM not available for refinement."
+            ],
+        }
 
+    excel_data = state.get("excel_data", [])
+    original_answers = state.get("original_answers", [])
     selected_pages = state.get("selected_pages", [])
-    pdf_context = _build_pdf_context(selected_pages)
 
-    refined_answers = state.get("refined_answers", [])
-    verification_results = state.get("verification_results", [])
+    settings = get_settings()
 
-    refined_by_variable = {
-        answer["variable"]: answer
-        for answer in refined_answers
-    }
-
-    verification_by_variable = {
-        result["variable"]: result
-        for result in verification_results
-    }
-
-    current_answers = []
-
-    for answer in answers:
-        variable = answer.get("variable", "")
-
-        previous_verification = verification_by_variable.get(
-            variable
-        )
-
-        if (
-            previous_verification
-            and previous_verification.get("is_correct")
-        ):
-            current_answers.append(answer)
-            continue
-
-        confidence = float(
-            answer.get("confidence", 0.0)
-        )
-
-        candidate = answer
-
-        if confidence < REFINEMENT_CONFIDENCE_THRESHOLD:
-            candidate = _refine_answer(
-                llm,
-                answer,
-                pdf_context,
-            )
-
-        elif variable in refined_by_variable:
-            candidate = refined_by_variable[variable]
-
-        verification = _verify_answer(
-            llm,
-            candidate,
-            pdf_context,
-        )
-
-        refined_by_variable[variable] = candidate
-        verification_by_variable[variable] = verification
-
-        if verification.get("is_correct"):
-            final_answer = candidate.copy()
-
-            final_answer["verification_status"] = "verified"
-            final_answer["verification_confidence"] = (
-                verification.get(
-                    "verification_confidence",
-                    0.0,
-                )
-            )
-            final_answer["verification_reason"] = (
-                verification.get("reason", "")
-            )
-
-            current_answers.append(final_answer)
-
-        else:
-            candidate = candidate.copy()
-
-            candidate["verification_status"] = (
-                "verification_failed"
-            )
-            candidate["verification_confidence"] = (
-                verification.get(
-                    "verification_confidence",
-                    0.0,
-                )
-            )
-            candidate["verification_reason"] = (
-                verification.get("reason", "")
-            )
-
-            current_answers.append(candidate)
-
-    return {
-        "answers": current_answers,
-        "original_answers": original_answers,
-        "refined_answers": list(refined_by_variable.values()),
-        "verification_results": list(
-            verification_by_variable.values()
-        ),
-        "refinement_attempts": attempts + 1,
-    }
-
-
-def route_after_refinement(
-    state: FinancialGraphState,
-) -> str:
-    answers = state.get("answers", [])
-    attempts = state.get("refinement_attempts", 0)
-
-    if not answers:
-        return "continue"
-
-    all_verified = all(
-        answer.get("verification_status") == "verified"
-        for answer in answers
+    source_link = (
+        settings.sharepoint_link
+        + state.get("pdf_file_name", "").replace(" ", "%20")
     )
 
-    if all_verified:
-        return "continue"
+    metrics = _select_metrics_for_refinement(
+        excel_data,
+        original_answers,
+    )
 
-    if attempts >= MAX_REFINEMENT_ATTEMPTS:
-        return "continue"
+    if not metrics:
+        return {
+            "answers": original_answers,
+            "refined_answers": [],
+            "refinement_attempt": 0,
+        }
 
-    return "refine"
+    pdf_context = _build_pdf_context(selected_pages)
+
+    current_answers = metrics
+    all_refined_answers = []
+
+    for attempt in range(1, MAX_REFINEMENT_ATTEMPTS + 1):
+        prompt = build_refinement_prompt(
+            current_answers,
+            pdf_context,
+            attempt,
+        )
+
+        messages = [
+            SystemMessage(
+                content=REFINEMENT_SYSTEM_PROMPT
+            ),
+            HumanMessage(content=prompt),
+        ]
+
+        try:
+            structured_llm = llm.with_structured_output(
+                RefinementResponse
+            )
+
+            response = structured_llm.invoke(messages)
+
+        except Exception as exc:
+            error = (
+                f"Refinement attempt {attempt} failed: {exc}"
+            )
+
+            return {
+                "answers": state.get(
+                    "original_answers",
+                    [],
+                ),
+                "refined_answers": all_refined_answers,
+                "refinement_attempt": attempt,
+                "errors": state.get(
+                    "errors",
+                    [],
+                ) + [error],
+            }
+
+        refined = [
+            _normalize_answer(
+                answer.model_dump(),
+                source_link,
+            )
+            for answer in response.answers
+        ]
+
+        all_refined_answers.extend(refined)
+
+        current_answers = [
+            {
+                **metric,
+                **refined_answer,
+            }
+            for metric in metrics
+            for refined_answer in refined
+            if _metric_key(metric)
+            == _metric_key(refined_answer)
+        ]
+
+        metrics = current_answers
+
+    final_answers = _merge_refined_answers(
+        excel_data,
+        original_answers,
+        all_refined_answers,
+    )
+
+    return {
+        "answers": final_answers,
+        "refined_answers": all_refined_answers,
+        "refinement_attempt": MAX_REFINEMENT_ATTEMPTS,
+        "errors": state.get("errors", []),
+    }
