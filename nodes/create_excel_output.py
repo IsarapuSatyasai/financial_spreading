@@ -63,6 +63,145 @@ def align_answers_to_template(
     return aligned
 
 
+def build_comparison_dataframes(
+    excel_data,
+    original_answers,
+    final_answers,
+):
+    """Create original and refined comparison worksheets."""
+
+    original_map = {
+        (
+            answer["worksheet"],
+            answer["variable"],
+        ): answer
+        for answer in original_answers
+    }
+
+    final_map = {
+        (
+            answer["worksheet"],
+            answer["variable"],
+        ): answer
+        for answer in final_answers
+    }
+
+    comparison_data = {}
+
+    for metric in excel_data:
+        worksheet = metric["worksheet"]
+
+        key = (
+            worksheet,
+            metric["variable"],
+        )
+
+        original = original_map.get(
+            key,
+            {},
+        )
+
+        final = final_map.get(
+            key,
+            {},
+        )
+
+        original_answer = original.get(
+            "answer",
+            "N/A",
+        )
+
+        refined_answer = final.get(
+            "answer",
+            original_answer,
+        )
+
+        original_confidence = original.get(
+            "confidence",
+            0.0,
+        )
+
+        refined_confidence = final.get(
+            "confidence",
+            original_confidence,
+        )
+
+        original_page = original.get(
+            "page_number",
+            -1,
+        )
+
+        refined_page = final.get(
+            "page_number",
+            original_page,
+        )
+
+        original_source_fields = original.get(
+            "source_fields",
+            [],
+        )
+
+        refined_source_fields = final.get(
+            "source_fields",
+            original_source_fields,
+        )
+
+        original_formula = original.get(
+            "formula",
+        )
+
+        refined_formula = final.get(
+            "formula",
+            original_formula,
+        )
+
+        original_source_link = original.get(
+            "source_link",
+            "N/A",
+        )
+
+        refined_source_link = final.get(
+            "source_link",
+            original_source_link,
+        )
+
+        changed = (
+            original_answer != refined_answer
+            or original_confidence != refined_confidence
+            or original_page != refined_page
+            or original_source_fields != refined_source_fields
+            or original_formula != refined_formula
+            or original_source_link != refined_source_link
+        )
+
+        row = {
+            "variable": metric["variable"],
+            "answer_original": original_answer,
+            "answer_refined": refined_answer,
+            "confidence_original": original_confidence,
+            "confidence_refined": refined_confidence,
+            "page_number_original": original_page,
+            "page_number_refined": refined_page,
+            "source_fields_original": original_source_fields,
+            "source_fields_refined": refined_source_fields,
+            "formula_original": original_formula,
+            "formula_refined": refined_formula,
+            "source_link_original": original_source_link,
+            "source_link_refined": refined_source_link,
+            "changed": changed,
+        }
+
+        comparison_data.setdefault(
+            worksheet,
+            [],
+        ).append(row)
+
+    return {
+        worksheet: pd.DataFrame(rows)
+        for worksheet, rows in comparison_data.items()
+    }
+
+
 def create_excel_output(
     state: FinancialGraphState,
 ):
@@ -70,6 +209,11 @@ def create_excel_output(
 
     excel_data = state.get(
         "excel_data",
+        [],
+    )
+
+    original_answers = state.get(
+        "original_answers",
         [],
     )
 
@@ -91,28 +235,46 @@ def create_excel_output(
     if not excel_data:
         return {
             "output_excel": "",
+            "comparison_excel": "",
             "errors": state.get(
                 "errors",
                 [],
-            ) + ["No template metrics available for Excel output."],
+            ) + [
+                "No template metrics available for Excel output."
+            ],
         }
 
     if not answers:
         answers = []
 
     output_name = (
-    pdf_file_name.removeprefix(
-        "InputData"
-    ).removesuffix(
-        ".pdf"
-    )
-    + ".xlsx"
+        pdf_file_name.removeprefix(
+            "InputData"
+        ).removesuffix(
+            ".pdf"
+        )
+        + ".xlsx"
     )
 
     output_excel = (
         output_path.rstrip("/")
         + "/"
         + output_name
+    )
+
+    comparison_name = (
+        pdf_file_name.removeprefix(
+            "InputData"
+        ).removesuffix(
+            ".pdf"
+        )
+        + "-comparison.xlsx"
+    )
+
+    comparison_excel = (
+        output_path.rstrip("/")
+        + "/"
+        + comparison_name
     )
 
     aligned_answers = align_answers_to_template(
@@ -141,9 +303,19 @@ def create_excel_output(
         for worksheet, rows in worksheet_dict.items()
     }
 
+    comparison_dict = build_comparison_dataframes(
+        excel_data,
+        original_answers,
+        answers,
+    )
+
     try:
         print(
             f"Creating Excel output: {output_excel}"
+        )
+
+        print(
+            f"Creating comparison output: {comparison_excel}"
         )
 
         print(
@@ -158,13 +330,24 @@ def create_excel_output(
             f"Worksheets: {list(worksheet_dict.keys())}"
         )
 
+        print(
+            f"Comparison worksheets: "
+            f"{list(comparison_dict.keys())}"
+        )
+
         status = excel_write(
             dataframes=worksheet_dict,
             output_path=output_excel,
         )
 
+        comparison_status = excel_write(
+            dataframes=comparison_dict,
+            output_path=comparison_excel,
+        )
+
         return {
             "output_excel": status,
+            "comparison_excel": comparison_status,
             "errors": state.get(
                 "errors",
                 [],
@@ -178,11 +361,14 @@ def create_excel_output(
 
         return {
             "output_excel": "",
+            "comparison_excel": "",
             "errors": state.get(
                 "errors",
                 [],
             ) + [error],
         }
+
+
 # """Node: that write final output to the excel file."""
 
 # import re

@@ -7,9 +7,9 @@ import os
 from databricks.sdk.runtime import dbutils, spark
 
 class Settings:
-    os.environ["AZURE_OPENAI_API_KEY"] = dbutils.secrets.get(
-        scope="azure-key-vault-scope", key="openai-apim-api-key"
-        )
+    # os.environ["AZURE_OPENAI_API_KEY"] = dbutils.secrets.get(
+    #     scope="azure-key-vault-scope", key="openai-apim-api-key"
+    #     )
     os.environ["AZURE_OPENAI_ENDPOINT"] = "https://msc-apim-gailtu-prd.azure-api.net/openai-api"
 
     # access to storage account has changed to this method os.environ["STORAGE_ACCOUNT"] = "mscsta{ci_code}{env}".format(ci_code=os.environ["CI_CODE"], env=os.environ["ENVIRONMENT"])
