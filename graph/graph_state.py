@@ -61,17 +61,23 @@ class FinancialGraphState(TypedDict, total=False):
     #Selected pages for extraction
     selected_pages: List[Dict[str, Any]]
     
+    #Baseline selected pages for extraction
+    baseline_selected_pages: List[Dict[str, Any]]
+    
     # #Extracted tables from the PDF document
     # tables: List[Dict[str, Any]]
 
     # #Metric requested for each Excel row
     # metric_requests: List[Dict[str, Any]]
+    
+    # original answers
+    original_answers: List[Dict[str, Any]]
+    
+    # Refined answers
+    refined_answers: List[Dict[str, Any]]
 
     #Extracted metrics for each Excel row
     answers: List[Dict[str, Any]]
-    
-    # Number of attempts allowed for confidence refinement
-    refinement_attempts: int
 
 
     # #*************Output******************
@@ -81,8 +87,12 @@ class FinancialGraphState(TypedDict, total=False):
 
     # #Final answer for each Excel row
     # final_answer: List[Dict[str, Any]]
+    
+    # refinement attempt
+    refinement_attempt: int
 
     #Any errors encountered during execution
+    # This can be changed to Annotated[list, operator.add]
     errors: List[str]
 
     #Final check that all metrics have been extracted

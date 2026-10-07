@@ -1,5 +1,32 @@
 """Multilingual keywords for financial disclosures. This will be used for selecting relevant pages from the shared annual report."""
 
+import re
+
+
+FINANCIAL_TERMS = [
+    "balance sheet",
+    "statement of financial position",
+    "income statement",
+    "profit and loss",
+    "cash flow statement",
+    "financial statements",
+    "revenue",
+    "assets",
+    "liabilities",
+    "equity",
+]
+
+
+UNIT_TERMS = [
+    "in thousands",
+    "in millions",
+    "in billions",
+    "thousand",
+    "million",
+    "billion",
+    "€000",
+    "$000",
+]
 
 english_keywords = [  #Categories
     # Navigation pages
@@ -561,3 +588,63 @@ all_keywords = english_keywords + dutch_keywords + german_keywords + french_keyw
 def page_score(text:str) -> int:
   """Return count of exact keywords that are found in the text"""
   return sum([1 for keyword in all_keywords if keyword in text.lower()])
+
+def page_relevance_score(text: str) -> dict:
+    """Calculate relevance score for a financial page."""
+
+    text_lower = text.lower()
+
+    keyword_score = page_score(text)
+
+    year_score = len(
+        set(
+            re.findall(
+                r"\b(?:19|20)\d{2}\b",
+                text,
+            )
+        )
+    )
+
+    number_count = len(
+        re.findall(
+            r"(?<!\w)[(+-]?\d[\d,.]*(?!\w)",
+            text,
+        )
+    )
+
+    word_count = max(
+        len(text.split()),
+        1,
+    )
+
+    numeric_density = number_count / word_count
+
+    unit_score = sum(
+        term in text_lower
+        for term in UNIT_TERMS
+    )
+
+    financial_score = sum(
+        term in text_lower
+        for term in FINANCIAL_TERMS
+    )
+
+    score = (
+        keyword_score
+        + (year_score * 2)
+        + (numeric_density * 5)
+        + (unit_score * 2)
+        + (financial_score * 3)
+    )
+
+    return {
+        "score": round(score, 3),
+        "keyword_score": keyword_score,
+        "year_score": year_score,
+        "numeric_density": round(
+            numeric_density,
+            4,
+        ),
+        "unit_score": unit_score,
+        "financial_score": financial_score,
+    }
