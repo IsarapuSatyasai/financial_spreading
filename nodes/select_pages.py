@@ -24,8 +24,8 @@ def select_pages(state: FinancialGraphState) -> dict:
       selected_pages.append(page)
   
   # If the number of pages exceeds the minimum allowed, retain all pages without filtering
-  if len(pdf_pages) < settings.min_pages:
-    selected_pages = pdf_pages
+  if len(pdf_pages) > settings.min_pages:
+    selected_pages = pages
 
   return {"selected_pages": selected_pages, 
           "errors": state.get("errors", []) 
