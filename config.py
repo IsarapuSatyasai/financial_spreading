@@ -60,8 +60,14 @@ class Settings:
     page_score_threshold = 1
     min_pages = 30
     max_selected_pages = 10
-    max_adjacent_pages = 2
     refinement_attempts = 0
+
+    # first_n_pages = 75
+    # page_score_threshold = 1
+    # min_pages = 30
+    # max_selected_pages = 10
+    # max_adjacent_pages = 2
+    # refinement_attempts = 0
 
 
     # --- Sharepoint ---

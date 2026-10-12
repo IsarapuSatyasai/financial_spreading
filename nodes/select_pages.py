@@ -1,57 +1,215 @@
-"""This node helps to select relevant pages from the annual report based on given set of keywords"""
 
-# from prompts.selected_keywords import page_score
-from prompts.selected_keywords import (
-    page_relevance_score,
-    page_score,
-)
+"""Select relevant annual report pages using template metrics."""
+
+import re
+from collections.abc import Mapping
 from config import get_settings
 from graph.graph_state import FinancialGraphState
+from prompts.selected_keywords import (
+    normalize_text,
+    numeric_density,
+    page_score,
+    table_structure_score,
+)
 
-CONTINUATION_MARKERS = [
+
+CONTINUATION_MARKERS = (
     "continued",
     "continuation",
     "carried forward",
     "brought forward",
-]
+)
 
-# def select_pages(state: FinancialGraphState) -> dict:
-#   """Select pages by matching keywords from the given set of keywords. The keywords are stored in the variable `selected_keywords`."""
+METRIC_SYNONYM_GROUPS = (
+    ("revenue", "turnover"),
+    ("total revenue", "total sales", "total turnover"),
+    ("cost of sales", "cost of goods sold", "cogs"),
+    (
+        "profit before tax",
+        "income before tax",
+        "earnings before tax",
+        "pbt",
+    ),
+    ("profit after tax", "net profit after tax", "pat"),
+    ("profit for the year", "profit for the period"),
+    ("cash and cash equivalents", "cash equivalents"),
+    ("trade receivables", "accounts receivable", "trade debtors"),
+    ("trade payables", "accounts payable", "trade creditors"),
+    (
+        "property plant and equipment",
+        "property and equipment",
+        "tangible fixed assets",
+        "ppe",
+    ),
+    ("current assets", "short term assets"),
+    ("non current assets", "noncurrent assets", "long term assets"),
+    ("current liabilities", "short term liabilities"),
+    (
+        "non current liabilities",
+        "noncurrent liabilities",
+        "long term liabilities",
+    ),
+    ("operating profit", "operating income"),
+    ("borrowings", "financial borrowings"),
+    ("lease liabilities", "lease obligations"),
+    ("shareholders equity", "shareholders funds"),
+    ("retained earnings", "accumulated profits"),
+    (
+        "depreciation and amortisation",
+        "depreciation and amortization",
+    ),
+)
 
-#   settings = get_settings()
+def _to_page_record(page, index):
+    if isinstance(page, Mapping):
+        record = dict(page)
+        raw_metadata = record.get("metadata")
+        text = record.get("text")
 
-#   pdf_pages = state.get("pdf_pages", [])
-#   n = settings.first_n_pages
+        if text is None:
+            text = record.get("page_content", "")
+    else:
+        raw_metadata = getattr(page, "metadata", None)
+        text = getattr(page, "page_content", "")
+        record = {}
 
-#   selected_pages = []
+    metadata = (
+        dict(raw_metadata)
+        if isinstance(raw_metadata, Mapping)
+        else {}
+    )
 
-#   #keep first n pages
-#   for page in pdf_pages[:n]:
-#     selected_pages.append(page)
+    text = str(text or "")
 
-#   for page in pdf_pages[n:]:
-#     page_text = page["text"]
-#     if page_score(page_text) > settings.page_score_threshold:
-#       selected_pages.append(page)
-  
-#   # If the number of pages exceeds the minimum allowed, retain all pages without filtering
-#   if len(pdf_pages) < settings.min_pages:
-#     selected_pages = pdf_pages
+    def to_int(value):
+        try:
+            return int(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
 
-#   return {"selected_pages": selected_pages, 
-#           "errors": state.get("errors", []) 
-#           }
+    existing_number = to_int(record.get("page_number"))
+    metadata_page = to_int(metadata.get("page"))
+    metadata_page_number = to_int(metadata.get("page_number"))
 
-def select_pages(state: FinancialGraphState) -> dict:
-    settings = get_settings()
-    pdf_pages = state.get("pdf_pages", [])
+    if existing_number is not None and existing_number >= 1:
+        page_number = existing_number
+    elif metadata_page is not None and metadata_page >= 0:
+        page_number = metadata_page + 1
+    elif (
+        metadata_page_number is not None
+        and metadata_page_number >= 1
+    ):
+        page_number = metadata_page_number
+    else:
+        page_number = index + 1
 
-    # Assign physical PDF page numbers.
-    # Python list indices start at 0, but PDF pages start at 1.
-    for index, page in enumerate(pdf_pages):
-        page["page_number"] = index + 1
+    metadata["page_number"] = page_number
 
-    # Keep existing baseline selection unchanged.
+    record["metadata"] = metadata
+    record["text"] = text
+    record["page_content"] = text
+    record["page_number"] = page_number
+
+    return record
+
+def _contains_term(normalized_text, term):
+    if not normalized_text or not term:
+        return False
+
+    if term in ("current assets", "current liabilities"):
+        pattern = (
+            r"(?<!non )(?<!\w)"
+            + re.escape(term)
+            + r"(?!\w)"
+        )
+    else:
+        pattern = r"(?<!\w)" + re.escape(term) + r"(?!\w)"
+
+    return re.search(pattern, normalized_text) is not None
+
+
+def _metric_terms(variable):
+    base_term = normalize_text(variable)
+
+    if not base_term:
+        return set()
+
+    terms = {base_term}
+
+    for group in METRIC_SYNONYM_GROUPS:
+        normalized_group = {
+            normalize_text(term)
+            for term in group
+        }
+
+        if base_term in normalized_group:
+            terms.update(normalized_group)
+
+    return terms
+
+
+def _build_template_metrics(excel_data):
+    template_metrics = []
+
+    for metric in excel_data:
+        variable = str(metric.get("variable") or "").strip()
+        worksheet = str(metric.get("worksheet") or "").strip()
+
+        if not variable:
+            continue
+
+        terms = _metric_terms(variable)
+
+        template_metrics.append(
+            {
+                "key": (worksheet, variable),
+                "label": f"{worksheet}::{variable}",
+                "terms": terms,
+            }
+        )
+
+    return template_metrics
+
+
+def _find_metric_matches(normalized_text, template_metrics):
+    matched_keys = set()
+    matched_labels = []
+
+    for metric in template_metrics:
+        if any(
+            _contains_term(normalized_text, term)
+            for term in metric["terms"]
+        ):
+            matched_keys.add(metric["key"])
+            matched_labels.append(metric["label"])
+
+    return matched_keys, matched_labels
+
+
+def _page_relevance(text, matched_metric_count):
+    normalized_text = normalize_text(text)
+
+    years = set(
+        re.findall(r"\b(?:19|20)\d{2}\b", text)
+    )
+
+    continuation_bonus = 1.5 if any(
+        _contains_term(normalized_text, marker)
+        for marker in CONTINUATION_MARKERS
+    ) else 0.0
+
+    score = (
+        matched_metric_count * 10.0
+        + min(numeric_density(text) * 30.0, 5.0)
+        + table_structure_score(text) * 2.0
+        + min(len(years) * 0.5, 2.0)
+        + continuation_bonus
+    )
+
+    return round(score, 2)
+
+
+def _baseline_selection(pdf_pages, settings):
     baseline_pages = []
 
     for page in pdf_pages[:settings.first_n_pages]:
@@ -64,106 +222,133 @@ def select_pages(state: FinancialGraphState) -> dict:
     if len(pdf_pages) < settings.min_pages:
         baseline_pages = pdf_pages
 
-    # Stage 1: broad keyword candidate filter.
+    return baseline_pages
+
+
+def select_pages(state: FinancialGraphState) -> dict:
+    settings = get_settings()
+
+    raw_pages = state.get("pdf_pages", [])
+    excel_data = state.get("excel_data", [])
+    errors = list(state.get("errors", []))
+
+    pdf_pages = [
+        _to_page_record(page, index)
+        for index, page in enumerate(raw_pages)
+    ]
+
+    baseline_pages = _baseline_selection(
+        pdf_pages,
+        settings,
+    )
+
+    if not excel_data:
+        errors.append(
+            "Page selection requires template metrics in excel_data. "
+            "Run read_creditlens_template before select_pages."
+        )
+
+        return {
+            "pdf_pages": pdf_pages,
+            "selected_pages": [],
+            "baseline_selected_pages": baseline_pages,
+            "errors": errors,
+        }
+
+    template_metrics = _build_template_metrics(excel_data)
     candidates = []
 
     for index, page in enumerate(pdf_pages):
         text = page.get("text", "")
+        normalized_text = normalize_text(text)
 
-        if page_score(text) >= settings.page_score_threshold:
-            relevance = page_relevance_score(text)
+        matched_keys, matched_labels = _find_metric_matches(
+            normalized_text,
+            template_metrics,
+        )
 
-            candidates.append(
-                (
-                    index,
-                    page,
-                    relevance,
-                )
-            )
+        if not matched_keys:
+            continue
 
-    # Stage 2: rank candidates by financial relevance.
-    candidates.sort(
-        key=lambda item: item[2]["score"],
-        reverse=True,
+        candidates.append(
+            {
+                "index": index,
+                "page": page,
+                "page_number": page["page_number"],
+                "metric_keys": matched_keys,
+                "matched_metrics": matched_labels,
+                "score": _page_relevance(
+                    text,
+                    len(matched_keys),
+                ),
+            }
+        )
+
+    max_selected_pages = max(
+        0,
+        int(settings.max_selected_pages),
     )
 
-    core_count = max(
-        1,
-        settings.max_selected_pages
-        - settings.max_adjacent_pages,
-    )
+    remaining = list(candidates)
+    selected_candidates = []
+    covered_metrics = set()
+
+    while remaining and len(selected_candidates) < max_selected_pages:
+        best = max(
+            remaining,
+            key=lambda candidate: (
+                len(candidate["metric_keys"] - covered_metrics),
+                candidate["score"],
+                -candidate["page_number"],
+            ),
+        )
+
+        selected_candidates.append(best)
+        covered_metrics.update(best["metric_keys"])
+        remaining.remove(best)
 
     selected_indices = {
-        item[0]
-        for item in candidates[:core_count]
+        candidate["index"]
+        for candidate in selected_candidates
     }
-
-    candidate_map = {
-        item[0]: item[2]
-        for item in candidates
-    }
-
-    # Add adjacent / continuation pages.
-    for index in sorted(selected_indices):
-        for neighbor_index in (
-            index - 1,
-            index + 1,
-        ):
-            if len(selected_indices) >= settings.max_selected_pages:
-                break
-
-            if neighbor_index < 0 or neighbor_index >= len(pdf_pages):
-                continue
-
-            if neighbor_index in selected_indices:
-                continue
-
-            neighbor_text = pdf_pages[
-                neighbor_index
-            ].get("text", "")
-
-            neighbor_relevance = page_relevance_score(
-                neighbor_text
-            )
-
-            neighbor_lower = neighbor_text.lower()
-
-            is_continuation = any(
-                marker in neighbor_lower
-                for marker in CONTINUATION_MARKERS
-            )
-
-            is_candidate = neighbor_index in candidate_map
-
-            if is_candidate or (
-                is_continuation
-                and neighbor_relevance["score"] > 0
-            ):
-                selected_indices.add(
-                    neighbor_index
-                )
 
     selected_pages = [
-        pdf_pages[index]
-        for index in sorted(selected_indices)
+        page
+        for index, page in enumerate(pdf_pages)
+        if index in selected_indices
     ]
+
+    if not selected_pages:
+        errors.append(
+            "No PDF pages matched the template metric names or "
+            "configured synonyms. Review the metric names and "
+            "METRIC_SYNONYM_GROUPS."
+        )
 
     print(
         "Improved selected pages:",
-        [
-            page["page_number"]
-            for page in selected_pages
-        ],
+        [page["page_number"] for page in selected_pages],
+    )
+    print("Improved selected page count:", len(selected_pages))
+    print(
+        "Template metrics matched:",
+        len(covered_metrics),
+        "of",
+        len({metric["key"] for metric in template_metrics}),
     )
 
-    print(
-        "Improved selected page count:",
-        len(selected_pages),
-    )
+    for candidate in sorted(
+        selected_candidates,
+        key=lambda item: item["page_number"],
+    ):
+        print(
+            f"PDF page {candidate['page_number']}: "
+            f"{candidate['matched_metrics']}"
+        )
 
     return {
         "pdf_pages": pdf_pages,
         "selected_pages": selected_pages,
         "baseline_selected_pages": baseline_pages,
-        "errors": state.get("errors", []),
+        "errors": errors,
     }

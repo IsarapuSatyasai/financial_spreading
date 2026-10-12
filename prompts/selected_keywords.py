@@ -181,6 +181,7 @@ all_keywords = list(
 )
 
 
+
 def normalize_text(text: str) -> str:
     text = unicodedata.normalize("NFKD", str(text).lower())
     text = "".join(
@@ -192,23 +193,48 @@ def normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def contains_phrase(text: str, phrase: str) -> bool:
-    text = normalize_text(text)
-    phrase = normalize_text(phrase)
+def _normalize_terms(terms):
+    return [
+        (term, normalized)
+        for term in terms
+        if (normalized := normalize_text(term))
+    ]
 
-    if not text or not phrase:
+
+_NORMALIZED_KEYWORDS = _normalize_terms(all_keywords)
+_NORMALIZED_STRONG_TERMS = _normalize_terms(
+    STRONG_FINANCIAL_TERMS
+)
+_NORMALIZED_UNIT_TERMS = _normalize_terms(UNIT_TERMS)
+_NORMALIZED_LOW_VALUE_TERMS = _normalize_terms(LOW_VALUE_TERMS)
+
+
+def _contains_normalized_phrase(
+    normalized_text: str,
+    normalized_phrase: str,
+) -> bool:
+    if not normalized_text or not normalized_phrase:
         return False
 
     return re.search(
-        r"(?<!\w)" + re.escape(phrase) + r"(?!\w)",
-        text,
+        r"(?<!\w)" + re.escape(normalized_phrase) + r"(?!\w)",
+        normalized_text,
     ) is not None
 
 
+def contains_phrase(text: str, phrase: str) -> bool:
+    return _contains_normalized_phrase(
+        normalize_text(text),
+        normalize_text(phrase),
+    )
+
+
 def page_score(text: str) -> int:
+    normalized_text = normalize_text(text)
+
     return sum(
-        1 for keyword in all_keywords
-        if contains_phrase(text, keyword)
+        _contains_normalized_phrase(normalized_text, phrase)
+        for _, phrase in _NORMALIZED_KEYWORDS
     )
 
 
@@ -246,7 +272,10 @@ def table_structure_score(text: str) -> float:
         2.0,
     )
 
-    if any(re.search(r"\s{2,}|\t|\|", line) for line in lines):
+    if any(
+        re.search(r"\s{2,}|\t|\|", line)
+        for line in lines
+    ):
         score += 1.0
 
     return min(score, 3.0)
@@ -262,18 +291,30 @@ def page_relevance_score(text: str) -> dict:
         }
 
     keyword_matches = [
-        keyword for keyword in all_keywords
-        if contains_phrase(normalized_text, keyword)
+        term
+        for term, phrase in _NORMALIZED_KEYWORDS
+        if _contains_normalized_phrase(
+            normalized_text,
+            phrase,
+        )
     ]
 
     strong_matches = [
-        term for term in STRONG_FINANCIAL_TERMS
-        if contains_phrase(normalized_text, term)
+        term
+        for term, phrase in _NORMALIZED_STRONG_TERMS
+        if _contains_normalized_phrase(
+            normalized_text,
+            phrase,
+        )
     ]
 
     unit_matches = [
-        term for term in UNIT_TERMS
-        if contains_phrase(normalized_text, term)
+        term
+        for term, phrase in _NORMALIZED_UNIT_TERMS
+        if _contains_normalized_phrase(
+            normalized_text,
+            phrase,
+        )
     ]
 
     years = set(re.findall(r"\b(?:19|20)\d{2}\b", text))
@@ -290,8 +331,12 @@ def page_relevance_score(text: str) -> dict:
     )
 
     penalty = sum(
-        1.0 for term in LOW_VALUE_TERMS
-        if contains_phrase(normalized_text, term)
+        1.0
+        for _, phrase in _NORMALIZED_LOW_VALUE_TERMS
+        if _contains_normalized_phrase(
+            normalized_text,
+            phrase,
+        )
     )
 
     if len(normalized_text.split()) < 30:

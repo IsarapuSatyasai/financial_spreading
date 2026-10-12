@@ -113,14 +113,31 @@ def validate_template_alignment(
         )
 
 
+
 def answer_questions(state: FinancialGraphState) -> dict:
     """Extract metrics via LLM and enrich each answer with an Excel hyperlink."""
+
+    excel_data = state.get("excel_data", [])
+    errors = list(state.get("errors", []))
+    selected_pages = state.get("selected_pages", [])
+
+    if not selected_pages:
+        final_answers = align_answers_to_template(
+            excel_data,
+            [],
+        )
+
+        return {
+            "original_answers": final_answers,
+            "answers": final_answers,
+            "errors": errors + [
+                "Extraction skipped because no template-relevant pages were selected."
+            ],
+        }
+
     llm = state.get("llm")
     structured_llm = llm.with_structured_output(ExtractionResponse)
 
-    excel_data = state.get("excel_data", [])
-    errors = state.get("errors", [])
-    selected_pages = state.get("selected_pages", [])
     pdf_file_name = state.get("pdf_file_name", "")
   
     settings = get_settings()
@@ -129,15 +146,31 @@ def answer_questions(state: FinancialGraphState) -> dict:
 
     USER_PROMPT = get_user_prompt(excel_data)
     
+    # full_context = "\n\n".join(
+    #     [f"--- Page {i+1} ---\n{page.get('text', '')}" for i, page in enumerate(selected_pages)]
+    # )
+    
     full_context = "\n\n".join(
-        [f"--- Page {i+1} ---\n{page.get('text', '')}" for i, page in enumerate(selected_pages)]
+        [
+            f"--- PDF Page {page.get('page_number', i + 1)} ---\n"
+            f"{page.get('text', '')}"
+            for i, page in enumerate(selected_pages)
+        ]
     )
+
+    # user_content = (
+    #     f"Please extract the following variables:\n{USER_PROMPT}\n\n"
+    #     f"Document context:\n{full_context}\n\n"
+    # )
 
     user_content = (
         f"Please extract the following variables:\n{USER_PROMPT}\n\n"
+        "Use only the supplied document context. "
+        "For page_number, return the physical PDF page number shown "
+        "in the context header. Do not use the selected-page position "
+        "or context order as the page number.\n\n"
         f"Document context:\n{full_context}\n\n"
     )
-
     messages = [
         SystemMessage(content=SYSTEM_PROMPT), 
         HumanMessage(content=user_content)
