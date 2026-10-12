@@ -233,43 +233,45 @@ def build_comparison_dataframes(
         for worksheet, rows in comparison_data.items()
     }
 
-# def build_page_selection_comparison(
-#     pdf_pages,
-#     baseline_pages,
-#     improved_pages,
-# ):
-#     """Compare baseline and improved page selection."""
+def build_page_selection_comparison(
+        pdf_pages,
+        baseline_pages,
+        improved_pages,
+    ):
+        """Compare baseline and improved page selection."""
 
-#     baseline_numbers = {
-#         page.get("page_number")
-#         for page in baseline_pages
-#     }
+        baseline_numbers = {
+            page.get("page_number")
+            for page in baseline_pages
+        }
 
-#     improved_numbers = {
-#         page.get("page_number")
-#         for page in improved_pages
-#     }
+        improved_numbers = {
+            page.get("page_number")
+            for page in improved_pages
+        }
 
-#     rows = []
+        rows = []
 
-#     for index, page in enumerate(pdf_pages, start=1):
-#         page_number = page.get("page_number", index)
+        for page in pdf_pages:
+            page_number = page.get("page_number")
 
-#         baseline_selected = page_number in baseline_numbers
-#         improved_selected = page_number in improved_numbers
+            rows.append(
+                {
+                    "page_number": page_number,
+                    "baseline_selected": (
+                        page_number in baseline_numbers
+                    ),
+                    "improved_selected": (
+                        page_number in improved_numbers
+                    ),
+                    "changed": (
+                        (page_number in baseline_numbers)
+                        != (page_number in improved_numbers)
+                    ),
+                }
+            )
 
-#         rows.append(
-#             {
-#                 "page_number": page_number,
-#                 "baseline_selected": baseline_selected,
-#                 "improved_selected": improved_selected,
-#                 "changed": (
-#                     baseline_selected != improved_selected
-#                 ),
-#             }
-#         )
-
-#     return pd.DataFrame(rows)
+        return pd.DataFrame(rows)
 
 def create_excel_output(
     state: FinancialGraphState,
@@ -379,13 +381,13 @@ def create_excel_output(
         state.get("baseline_selected_pages", []),
         state.get("selected_pages", []),
     )
-    # page_selection_comparison = build_page_selection_comparison(
-    #     state.get("pdf_pages", []),
-    #     state.get("baseline_selected_pages", []),
-    #     state.get("selected_pages", []),
-    # )
+    page_selection_comparison = build_page_selection_comparison(
+        state.get("pdf_pages", []),
+        state.get("baseline_selected_pages", []),
+        state.get("selected_pages", []),
+    )
 
-    # comparison_dict["Page Selection"] = page_selection_comparison
+    comparison_dict["Page Selection"] = page_selection_comparison
 
     try:
         print(

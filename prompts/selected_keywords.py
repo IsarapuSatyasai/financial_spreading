@@ -1,650 +1,305 @@
-"""Multilingual keywords for financial disclosures. This will be used for selecting relevant pages from the shared annual report."""
-
 import re
+import unicodedata
 
 
 FINANCIAL_TERMS = [
     "balance sheet",
     "statement of financial position",
     "income statement",
-    "profit and loss",
-    "cash flow statement",
-    "financial statements",
-    "revenue",
-    "assets",
-    "liabilities",
-    "equity",
-]
-
-
-UNIT_TERMS = [
-    "in thousands",
-    "in millions",
-    "in billions",
-    "thousand",
-    "million",
-    "billion",
-    "€000",
-    "$000",
-]
-
-english_keywords = [  #Categories
-    # Navigation pages
-    "contents",
-    "table of contents",
-    "outline",
-    "index",
-    "appendix",
-    "financial highlights",
-    "five year summary",
-    "ten year summary",
-    "consolidated financial statements",
-    "separate financial statements",
-    "management report",
-    "management discussion and analysis",
-    "MD&A",
-
-    # Company & metadata
-    "annual report",
-    "corporate information",
-    "general information",
-    "company information",
-    "company name",
-    "legal name",
-    "registered office",
-    "registered address",
-    "registered seat",
-    "principal place of business",
-    "headquarters",
-    "head office",
-    "incorporated in",
-    "country",
-    "jurisdiction",
-    "domicile",
-    "registration number",
-    "company registration",
-    "commercial register",
-    "chamber of commerce",
-    "VAT number",
-    "tax identification number",
-
-    # Auditor
-    "independent auditor's report",
-    "independent auditor report",
-    "auditor's report",
-    "audit report",
-    "auditor opinion",
-    "independent assurance report",
-    "basis for opinion",
-    "qualified opinion",
-    "unqualified opinion",
-    "adverse opinion",
-    "key audit matters",
-    "going concern",
-
-    # Currency & scale
-    "reporting currency",
-    "presentation currency",
-    "functional currency",
-    "currency",
-    "all amounts are expressed in",
-    "amounts in",
-    "figures in",
-    "in thousands",
-    "in millions",
-    "in billions",
-    "thousand euro",
-    "million euro",
-    "thousand dollars",
-    "million dollars",
-    "€000",
-    "$000",
-
-    # Reporting framework
-    "IFRS",
-    "IAS",
-    "US GAAP",
-    "accounting policies",
-    "significant accounting policies",
-    "basis of preparation",
-    "financial year ended",
-    "for the year ended",
-
-    # Financial statements
-    "balance sheet",
-    "statement of financial position",
-    "income statement",
-    "profit and loss",
-    "statement of earnings",
+    "statement of profit and loss",
+    "profit and loss account",
+    "statement of comprehensive income",
     "cash flow statement",
     "statement of cash flows",
-    "financial statements",
-    "notes to the financial statements",
-
-    # Assets
-    "intangible assets",
-    "goodwill",
-    "tangible assets",
-    "property plant and equipment",
-    "PPE",
-    "fixed assets",
-    "non-current assets",
+    "statement of changes in equity",
+    "total assets",
     "current assets",
-    "inventories",
-    "work in progress",
-    "trade receivables",
+    "non current assets",
+    "fixed assets",
+    "intangible assets",
+    "property plant and equipment",
     "accounts receivable",
-    "other receivables",
+    "trade receivables",
+    "inventories",
     "cash and cash equivalents",
-    "marketable securities",
-    "investments",
-    "financial assets",
-    "deferred tax assets",
-
-    # Equity
-    "equity",
-    "share capital",
-    "share premium",
-    "retained earnings",
-    "reserves",
-    "treasury shares",
-    "non-controlling interest",
-    "minority interest",
-
-    # Liabilities
-    "provisions",
-    "pension liabilities",
-    "retirement obligations",
-    "deferred tax liabilities",
-    "long-term liabilities",
+    "total liabilities",
     "current liabilities",
-    "trade payables",
+    "non current liabilities",
     "accounts payable",
-    "bank loans",
-    "bonds",
+    "trade payables",
+    "borrowings",
+    "long term debt",
+    "short term debt",
     "lease liabilities",
-    "subordinated debt",
-    "dividend payable",
-
-    # Income statement
+    "total equity",
+    "share capital",
+    "retained earnings",
     "revenue",
-    "net sales",
+    "total revenue",
+    "net revenue",
     "sales",
-    "cost of goods sold",
+    "net sales",
+    "cost of sales",
     "gross profit",
-    "employee benefits",
-    "salary expense",
+    "operating income",
+    "operating profit",
     "operating expenses",
+    "finance costs",
+    "interest expense",
     "depreciation",
     "amortisation",
-    "impairment",
-    "interest income",
-    "interest expense",
-    "income tax",
-
-    # Cash flow
-    "cash flow statement",
-    "statement of cash flows",
+    "amortization",
+    "profit before tax",
+    "profit after tax",
+    "net profit",
+    "net income",
+    "profit for the year",
+    "loss for the year",
+    "earnings per share",
+    "ebit",
+    "ebitda",
     "operating activities",
     "investing activities",
     "financing activities",
-    "free cash flow",
-
-    # Notes & disclosures
+    "net cash flow",
+    "capital expenditure",
+    "financial highlights",
+    "financial summary",
+    "financial performance",
+    "financial position",
+    "segment reporting",
     "related party transactions",
-    "intercompany loans",
-    "derivatives",
-    "hedging instruments",
-    "securitization",
     "contingent liabilities",
-    "guarantees",
-    "capital commitments",
-    "discontinued operations",
-    "defined benefit plan",
-    "defined contribution plan"
+    "financial instruments",
+    "working capital",
+    "net debt",
+    "total debt",
 ]
 
-dutch_keywords = [
-    # Navigation pages
-    "inhoudsopgave",
-    "inhoud",
-    "index",
-    "bijlage",
-    "financiële kerncijfers",
-    "meerjarenoverzicht",
-    "geconsolideerde jaarrekening",
-    "enkelvoudige jaarrekening",
-    "bestuursverslag",
-    "directieverslag",
+STRONG_FINANCIAL_TERMS = [
+    "balance sheet",
+    "statement of financial position",
+    "income statement",
+    "statement of profit and loss",
+    "statement of comprehensive income",
+    "statement of cash flows",
+    "cash flow statement",
+    "statement of changes in equity",
+    "consolidated financial statements",
+    "consolidated balance sheet",
+    "consolidated income statement",
+    "notes to the financial statements",
+    "total assets",
+    "total liabilities",
+    "total equity",
+    "profit before tax",
+    "profit after tax",
+]
 
-    # Company & metadata
-    "jaarverslag",
-    "algemene informatie",
-    "vennootschapsgegevens",
-    "maatschappelijke zetel",
-    "vestigingsplaats",
-    "hoofdkantoor",
-    "land",
-    "jurisdictie",
-    "ingeschreven bij",
-    "kamer van koophandel",
-    "kvk nummer",
-    "rechtspersoon",
+UNIT_TERMS = [
+    "in thousands",
+    "in thousand",
+    "in millions",
+    "in million",
+    "in billions",
+    "in billion",
+    "thousands of dollars",
+    "millions of dollars",
+    "thousands of euros",
+    "millions of euros",
+    "amounts in",
+    "figures in",
+    "usd",
+    "eur",
+    "gbp",
+    "inr",
+    "currency",
+    "$",
+    "€",
+    "£",
+]
 
-    # Auditor
-    "controleverklaring",
-    "onafhankelijke accountantsverklaring",
-    "accountantsverklaring",
-    "oordeel van de accountant",
-    "grondslag voor het oordeel",
-    "continuïteit",
-
-    # Currency & scale
-    "rapporteringsvaluta",
-    "presentatievaluta",
-    "functionele valuta",
-    "valuta",
-    "bedragen luiden in",
-    "x 1.000",
-    "x 1 miljoen",
-    "bedragen in duizenden",
-    "bedragen in miljoenen",
-
-    # Reporting framework
-    "ifrs",
-    "dutch gaap",
-    "waarderingsgrondslagen",
-    "grondslagen voor financiële verslaggeving",
-    "boekjaar",
-
-    # Financial statements
+DUTCH_TERMS = [
     "balans",
-    "staat van financiële positie",
     "winst-en-verliesrekening",
-    "resultatenrekening",
     "kasstroomoverzicht",
-    "jaarrekening",
-    "toelichting op de jaarrekening",
-
-    # Assets
-    "immateriële vaste activa",
-    "goodwill",
-    "materiële vaste activa",
-    "vaste activa",
-    "niet-vlottende activa",
-    "vlottende activa",
-    "voorraden",
-    "onderhanden werk",
-    "debiteuren",
-    "handelsvorderingen",
-    "overige vorderingen",
-    "liquide middelen",
-    "effecten",
-    "financiële vaste activa",
-
-    # Equity
+    "totale activa",
+    "totale passiva",
     "eigen vermogen",
-    "aandelenkapitaal",
-    "agio",
-    "ingehouden winst",
-    "reserves",
-    "eigen aandelen",
-    "minderheidsbelang",
-
-    # Liabilities
-    "voorzieningen",
-    "pensioenvoorziening",
-    "uitgestelde belastingverplichtingen",
-    "langlopende schulden",
-    "kortlopende schulden",
-    "crediteuren",
-    "handelsschulden",
-    "bankleningen",
-    "obligaties",
-    "leaseverplichtingen",
-    "achtergestelde leningen",
-
-    # Income statement
-    "omzet",
-    "netto-omzet",
-    "kostprijs van de omzet",
-    "brutowinst",
-    "personeelskosten",
-    "afschrijvingen",
-    "amortisatie",
-    "bijzondere waardevermindering",
-    "rentebaten",
-    "rentelasten",
-    "vennootschapsbelasting",
-
-    # Cash flow
-    "kasstroomoverzicht",
-    "operationele kasstroom",
-    "kasstroom uit investeringsactiviteiten",
-    "kasstroom uit financieringsactiviteiten",
-    "vrije kasstroom",
-
-    # Notes & disclosures
-    "verbonden partijen",
-    "intercompany leningen",
-    "derivaten",
-    "hedging",
-    "securitisatie",
-    "garanties",
-    "investeringsverplichtingen",
-    "beëindigde bedrijfsactiviteiten"
+    "bedrijfsopbrengsten",
+    "nettowinst",
+    "financiele positie",
+    "financiele resultaten",
 ]
 
-german_keywords = [
-    # Navigation pages
-    "inhaltsverzeichnis",
-    "übersicht",
-    "index",
-    "anhang",
-    "finanzkennzahlen",
-    "mehrjahresübersicht",
-    "konzernabschluss",
-    "einzelabschluss",
-    "lagebericht",
-    "geschäftsbericht",
-
-    # Company & metadata
-    "unternehmensinformationen",
-    "firmenname",
-    "gesellschaftssitz",
-    "hauptsitz",
-    "land",
-    "jurisdiktion",
-    "handelsregister",
-    "registergericht",
-
-    # Auditor
-    "bestätigungsvermerk",
-    "prüfungsbericht",
-    "abschlussprüfer",
-    "unabhängiger prüfer",
-    "prüfungsurteil",
-    "grundlage für das prüfungsurteil",
-    "wesentliche prüfungssachverhalte",
-
-    # Currency & scale
-    "berichtswährung",
-    "funktionale währung",
-    "darstellungswährung",
-    "währung",
-    "in tausend euro",
-    "in millionen euro",
-    "in tausend",
-    "in millionen",
-
-    # Reporting framework
-    "ifrs",
-    "hgb",
-    "us gaap",
-    "rechnungslegungsgrundsätze",
-    "bilanzierungsgrundsätze",
-    "geschäftsjahr",
-
-    # Financial statements
+GERMAN_TERMS = [
     "bilanz",
-    "vermögenslage",
     "gewinn- und verlustrechnung",
-    "guv",
     "kapitalflussrechnung",
-    "jahresabschluss",
-    "anhang",
-
-    # Assets
-    "immaterielle vermögenswerte",
-    "goodwill",
-    "sachanlagen",
-    "anlagevermögen",
-    "umlaufvermögen",
-    "vorräte",
-    "unfertige erzeugnisse",
-    "forderungen aus lieferungen und leistungen",
-    "liquide mittel",
-    "wertpapiere",
-    "finanzanlagen",
-
-    # Equity
+    "gesamte aktiva",
+    "gesamte passiva",
     "eigenkapital",
-    "aktienkapital",
-    "kapitalrücklage",
-    "gewinnrücklagen",
-    "eigene aktien",
-    "minderheitenanteile",
-
-    # Liabilities
-    "rückstellungen",
-    "pensionsrückstellungen",
-    "latente steuerverbindlichkeiten",
-    "langfristige verbindlichkeiten",
-    "kurzfristige verbindlichkeiten",
-    "bankdarlehen",
-    "anleihen",
-    "leasingverbindlichkeiten",
-    "nachrangige verbindlichkeiten",
-
-    # Income statement
-    "umsatz",
-    "umsatzerlöse",
-    "herstellungskosten",
-    "bruttoergebnis",
-    "personalaufwand",
-    "abschreibungen",
-    "wertminderungen",
-    "zinserträge",
-    "zinsaufwand",
-    "ertragsteuern",
-
-    # Cash flow
-    "kapitalflussrechnung",
-    "cashflow aus laufender geschäftstätigkeit",
-    "cashflow aus investitionstätigkeit",
-    "cashflow aus finanzierungstätigkeit",
-    "freier cashflow",
-
-    # Notes & disclosures
-    "nahestehende unternehmen",
-    "konzerninterne darlehen",
-    "derivate",
-    "sicherungsgeschäfte",
-    "verbriefung",
-    "eventualverbindlichkeiten",
-    "garantien",
-    "investitionsverpflichtungen",
-    "aufgegebene geschäftsbereiche"
+    "umsatzerlose",
+    "jahresuberschuss",
+    "finanzlage",
+    "finanzergebnis",
 ]
 
-french_keywords = [
-    # Navigation pages
-    "table des matières",
-    "sommaire",
-    "index",
-    "annexe",
-    "faits marquants financiers",
-    "chiffres clés",
-    "historique financier",
-    "états financiers consolidés",
-    "états financiers sociaux",
-    "rapport de gestion",
-
-    # Company & metadata
-    "rapport annuel",
-    "informations générales",
-    "informations sur la société",
-    "raison sociale",
-    "siège social",
-    "adresse du siège",
-    "forme juridique",
-    "immatriculation",
-    "registre du commerce",
-    "pays",
-    "juridiction",
-
-    # Auditor
-    "rapport de l'auditeur indépendant",
-    "rapport des commissaires aux comptes",
-    "rapport d'audit",
-    "opinion de l'auditeur",
-    "fondement de l'opinion",
-    "questions clés de l'audit",
-
-    # Currency & scale
-    "devise de présentation",
-    "devise fonctionnelle",
-    "monnaie de présentation",
-    "devise",
-    "en milliers d'euros",
-    "en millions d'euros",
-    "en milliers",
-    "en millions",
-
-    # Reporting framework
-    "ifrs",
-    "gaap",
-    "principes comptables",
-    "méthodes comptables",
-    "base de préparation",
-    "exercice clos",
-
-    # Financial statements
+FRENCH_TERMS = [
     "bilan",
-    "état de la situation financière",
-    "compte de résultat",
-    "compte de profits et pertes",
-    "tableau des flux de trésorerie",
-    "états financiers",
-    "notes aux états financiers",
-
-    # Assets
-    "immobilisations incorporelles",
-    "écart d'acquisition",
-    "goodwill",
-    "immobilisations corporelles",
-    "actifs non courants",
-    "actifs courants",
-    "stocks",
-    "travaux en cours",
-    "créances clients",
-    "créances commerciales",
-    "trésorerie",
-    "actifs financiers",
-
-    # Equity
+    "compte de resultat",
+    "tableau des flux de tresorerie",
+    "total de l actif",
+    "total du passif",
     "capitaux propres",
-    "capital social",
-    "prime d'émission",
-    "résultats non distribués",
-    "réserves",
-    "actions propres",
-    "intérêts minoritaires",
-
-    # Liabilities
-    "provisions",
-    "engagements de retraite",
-    "impôts différés",
-    "dettes à long terme",
-    "dettes à court terme",
-    "dettes fournisseurs",
-    "emprunts bancaires",
-    "obligations",
-    "dettes de location",
-
-    # Income statement
-    "chiffre d'affaires",
-    "ventes",
-    "coût des ventes",
-    "marge brute",
-    "charges de personnel",
-    "amortissement",
-    "dépréciation",
-    "produits financiers",
-    "charges financières",
-    "impôt sur le résultat",
-
-    # Cash flow
-    "tableau des flux de trésorerie",
-    "flux de trésorerie opérationnels",
-    "flux de trésorerie liés aux investissements",
-    "flux de trésorerie liés au financement",
-    "flux de trésorerie disponible",
-
-    # Notes & disclosures
-    "parties liées",
-    "prêts intragroupe",
-    "instruments dérivés",
-    "couverture",
-    "titrisation",
-    "passifs éventuels",
-    "garanties",
-    "engagements d'investissement",
-    "activités abandonnées"
+    "chiffre d affaires",
+    "resultat net",
+    "situation financiere",
+    "resultat financier",
 ]
 
-all_keywords = english_keywords + dutch_keywords + german_keywords + french_keywords
+LOW_VALUE_TERMS = [
+    "table of contents",
+    "glossary",
+    "index",
+    "contact us",
+    "contact details",
+    "corporate directory",
+    "management team",
+    "notice of meeting",
+]
 
-def page_score(text:str) -> int:
-  """Return count of exact keywords that are found in the text"""
-  return sum([1 for keyword in all_keywords if keyword in text.lower()])
+all_keywords = list(
+    dict.fromkeys(
+        FINANCIAL_TERMS
+        + STRONG_FINANCIAL_TERMS
+        + UNIT_TERMS
+        + DUTCH_TERMS
+        + GERMAN_TERMS
+        + FRENCH_TERMS
+    )
+)
+
+
+def normalize_text(text: str) -> str:
+    text = unicodedata.normalize("NFKD", str(text).lower())
+    text = "".join(
+        char for char in text
+        if not unicodedata.combining(char)
+    )
+    text = text.replace("&", " and ")
+    text = re.sub(r"[^\w]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def contains_phrase(text: str, phrase: str) -> bool:
+    text = normalize_text(text)
+    phrase = normalize_text(phrase)
+
+    if not text or not phrase:
+        return False
+
+    return re.search(
+        r"(?<!\w)" + re.escape(phrase) + r"(?!\w)",
+        text,
+    ) is not None
+
+
+def page_score(text: str) -> int:
+    return sum(
+        1 for keyword in all_keywords
+        if contains_phrase(text, keyword)
+    )
+
+
+def numeric_density(text: str) -> float:
+    tokens = str(text).split()
+
+    if not tokens:
+        return 0.0
+
+    numbers = re.findall(
+        r"(?<!\w)\(?[-+]?\d[\d,]*(?:\.\d+)?%?\)?(?!\w)",
+        str(text),
+    )
+
+    return min(len(numbers) / len(tokens), 1.0)
+
+
+def table_structure_score(text: str) -> float:
+    lines = [
+        line.strip()
+        for line in str(text).splitlines()
+        if line.strip()
+    ]
+
+    if not lines:
+        return 0.0
+
+    numeric_lines = sum(
+        1 for line in lines
+        if len(re.findall(r"\d[\d,.]*", line)) >= 2
+    )
+
+    score = min(
+        (numeric_lines / len(lines)) * 2,
+        2.0,
+    )
+
+    if any(re.search(r"\s{2,}|\t|\|", line) for line in lines):
+        score += 1.0
+
+    return min(score, 3.0)
+
 
 def page_relevance_score(text: str) -> dict:
-    """Calculate relevance score for a financial page."""
+    normalized_text = normalize_text(text)
 
-    text_lower = text.lower()
+    if not normalized_text:
+        return {
+            "score": 0.0,
+            "keyword_matches": [],
+        }
 
-    keyword_score = page_score(text)
+    keyword_matches = [
+        keyword for keyword in all_keywords
+        if contains_phrase(normalized_text, keyword)
+    ]
 
-    year_score = len(
-        set(
-            re.findall(
-                r"\b(?:19|20)\d{2}\b",
-                text,
-            )
-        )
-    )
+    strong_matches = [
+        term for term in STRONG_FINANCIAL_TERMS
+        if contains_phrase(normalized_text, term)
+    ]
 
-    number_count = len(
-        re.findall(
-            r"(?<!\w)[(+-]?\d[\d,.]*(?!\w)",
-            text,
-        )
-    )
+    unit_matches = [
+        term for term in UNIT_TERMS
+        if contains_phrase(normalized_text, term)
+    ]
 
-    word_count = max(
-        len(text.split()),
-        1,
-    )
-
-    numeric_density = number_count / word_count
-
-    unit_score = sum(
-        term in text_lower
-        for term in UNIT_TERMS
-    )
-
-    financial_score = sum(
-        term in text_lower
-        for term in FINANCIAL_TERMS
-    )
+    years = set(re.findall(r"\b(?:19|20)\d{2}\b", text))
+    number_density = numeric_density(text)
+    table_score = table_structure_score(text)
 
     score = (
-        keyword_score
-        + (year_score * 2)
-        + (numeric_density * 5)
-        + (unit_score * 2)
-        + (financial_score * 3)
+        min(len(strong_matches) * 3.0, 12.0)
+        + min(len(keyword_matches) * 1.0, 10.0)
+        + min(len(unit_matches) * 1.5, 4.5)
+        + min(len(years) * 0.75, 3.0)
+        + min(number_density * 30.0, 5.0)
+        + table_score
     )
 
+    penalty = sum(
+        1.0 for term in LOW_VALUE_TERMS
+        if contains_phrase(normalized_text, term)
+    )
+
+    if len(normalized_text.split()) < 30:
+        penalty += 1.0
+
+    score = max(score - min(penalty, 3.0), 0.0)
+
     return {
-        "score": round(score, 3),
-        "keyword_score": keyword_score,
-        "year_score": year_score,
-        "numeric_density": round(
-            numeric_density,
-            4,
-        ),
-        "unit_score": unit_score,
-        "financial_score": financial_score,
+        "score": round(score, 2),
+        "keyword_matches": keyword_matches,
     }
