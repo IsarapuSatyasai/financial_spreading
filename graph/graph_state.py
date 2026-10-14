@@ -97,3 +97,6 @@ class FinancialGraphState(TypedDict, total=False):
 
     #Final check that all metrics have been extracted
     extraction_completed: bool
+
+    # Categorized physical PDF page numbers
+    categorized_pages: Dict[str, List[int]]
