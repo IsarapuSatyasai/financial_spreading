@@ -7,8 +7,8 @@ def get_user_prompt(metrics: list) -> str:
     for item in metrics:
         if item["worksheet"] != active_worksheet:
             active_worksheet = item["worksheet"]
-            variables_to_extract.append(f"\Table: {item['worksheet']}")                                     
-        var_req = f"- Variable: '{item['variable']}' (Description: {item['description']})"
+            variables_to_extract.append(f"Table: {item['worksheet']}")                                     
+        var_req = f"\n- Variable: '{item['variable']}' (Description: {item['description']})"
         variables_to_extract.append(var_req)
         
     variables_list_str = "\n".join(variables_to_extract)

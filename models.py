@@ -13,7 +13,7 @@ class ExtractedAnswer(BaseModel):
     variable: str = Field(description="The name of the variable being extracted")
     answer: str = Field(description="The extracted value as given in the source document, or 'N/A' if not found")
     confidence: float = Field(
-        description="Confidence score between 0.0 and 1.0 based on how clearly the document states the value."
+        description="Confidence score between 0.0 and 1.0 based on how clearly the document states the value. It helps user to understand wether the metric is extracted, inferred, or ambiguous."
     )
     page_number: int = Field(
         description="The page number where the information was found. Set to -1 if not found."
