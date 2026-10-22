@@ -11,6 +11,10 @@ class ExtractedAnswer(BaseModel):
     # answer: str
     worksheet: str = Field(description="The worksheet name this variable belongs to")
     variable: str = Field(description="The name of the variable being extracted")
+    year: Optional[int] = Field(
+        default=None, 
+        description="Financial year this value belongs to (e.g. 2024). Null if not found."
+    )
     answer: str = Field(description="The extracted value as given in the source document, or 'N/A' if not found")
     confidence: float = Field(
         description="Confidence score between 0.0 and 1.0 based on how clearly the document states the value. It helps user to understand wether the metric is extracted, inferred, or ambiguous."
@@ -34,10 +38,7 @@ class ExtractedAnswer(BaseModel):
 
 class ExtractionResponse(BaseModel):
     """Overall extracted response from the LLM model."""
-    year: Optional[int] = Field(
-        default=None, 
-        description="The financial year this metric applies to (e.g., 2023, 2024). Set to null if not found."
-    )
+    
     currency: Optional[str] = Field(
         default=None, 
         description="The currency used for e.g. 'EUR', 'GBP', 'USD'. Set to null if not found."

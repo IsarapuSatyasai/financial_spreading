@@ -42,9 +42,13 @@ def answer_questions(state: FinancialGraphState) -> dict:
         [f"--- Page {i+1} ---\n{page.get('text', '')}" for i, page in enumerate(selected_pages)]
     )
 
+    # user_content = (
+    #     f"Please extract the following variables:\n{USER_PROMPT}\n\n"
+    #     f"Document context:\n{full_context}\n\n"
+    # )
     user_content = (
-        f"Please extract the following variables:\n{USER_PROMPT}\n\n"
-        f"Document context:\n{full_context}\n\n"
+    f"Please extract the following variables for every year present in the document:\n{USER_PROMPT}\n\n"
+    f"Document context:\n{full_context}\n\n"
     )
 
     messages = [

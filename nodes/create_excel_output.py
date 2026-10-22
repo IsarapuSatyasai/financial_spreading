@@ -35,23 +35,57 @@ def clean_llm_output(pydantic_response: list[dict]) -> list[dict]:
 
     return normalized_output
         
-def build_excel_dateframes(answers: list[dict]) -> dict[str, pd.DataFrame]:
-    """
-    Build a dict of DataFrames keyed by worksheet.
-    """
+# def build_excel_dateframes(answers: list[dict]) -> dict[str, pd.DataFrame]:
+#     """
+#     Build a dict of DataFrames keyed by worksheet.
+#     """
+#     worksheet_dict = {}
+#     for a in answers:
+#         row = {k: v for k, v in a.items() if k not in ("worksheet", "page_number")}
+#         worksheet_dict.setdefault(a["worksheet"], []).append(row)
+
+#     # Convert lists to DataFrames
+#     worksheet_dict = {ws: pd.DataFrame(rows) for ws, rows in worksheet_dict.items()}
+#     return worksheet_dict
+
+# #Create a chain for cleaning the output
+# excel_preparation_chain = (
+#     RunnableLambda(clean_llm_output, name="Clean extracted metrics from LLM")
+#     | RunnableLambda(build_excel_dateframes, name="Build excel dateframes")
+# )
+
+def build_excel_dataframes(answers: list[dict]) -> dict[str, pd.DataFrame]:
+    """Group answers by worksheet and pivot years into side-by-side columns."""
     worksheet_dict = {}
+
     for a in answers:
-        row = {k: v for k, v in a.items() if k not in ("worksheet", "page_number")}
-        worksheet_dict.setdefault(a["worksheet"], []).append(row)
+        ws = a["worksheet"]
+        worksheet_dict.setdefault(ws, []).append(a)
 
-    # Convert lists to DataFrames
-    worksheet_dict = {ws: pd.DataFrame(rows) for ws, rows in worksheet_dict.items()}
-    return worksheet_dict
+    result = {}
+    value_cols = ["answer", "confidence", "page_number", "source_fields", "formula", "source_link"]
 
-#Create a chain for cleaning the output
+    for ws, rows in worksheet_dict.items():
+        df = pd.DataFrame(rows)
+        if df.empty:
+            result[ws] = df
+            continue
+
+        years = sorted([y for y in df["year"].dropna().unique()])
+        base = df[["variable"]].drop_duplicates().reset_index(drop=True)
+
+        for year in years:
+            year_df = df[df["year"] == year][["variable"] + value_cols].copy()
+            year_df = year_df.rename(columns={c: f"{year}_{c}" for c in value_cols})
+            base = base.merge(year_df, on="variable", how="left")
+
+        result[ws] = base
+
+    return result
+
 excel_preparation_chain = (
     RunnableLambda(clean_llm_output, name="Clean extracted metrics from LLM")
-    | RunnableLambda(build_excel_dateframes, name="Build excel dateframes")
+    | RunnableLambda(build_excel_dataframes, name="Build excel dataframes")
 )
 
 #Create a function for creating LangGraph node that writes directly to the excel file
