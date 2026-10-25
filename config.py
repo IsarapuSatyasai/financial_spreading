@@ -7,9 +7,9 @@ import os
 from databricks.sdk.runtime import dbutils, spark
 
 class Settings:
-    os.environ["AZURE_OPENAI_API_KEY"] = dbutils.secrets.get(
-        scope="azure-key-vault-scope", key="openai-apim-api-key"
-        )
+    # os.environ["AZURE_OPENAI_API_KEY"] = dbutils.secrets.get(
+    #     scope="azure-key-vault-scope", key="openai-apim-api-key"
+    #     )
     os.environ["AZURE_OPENAI_ENDPOINT"] = "https://msc-apim-gailtu-prd.azure-api.net/openai-api"
 
     # access to storage account has changed to this method os.environ["STORAGE_ACCOUNT"] = "mscsta{ci_code}{env}".format(ci_code=os.environ["CI_CODE"], env=os.environ["ENVIRONMENT"])
@@ -59,6 +59,17 @@ class Settings:
     first_n_pages = 5
     page_score_threshold = 1
     min_pages = 30
+    max_selected_pages = 10
+    max_adjacent_pages = 10
+    refinement_attempts = 0
+
+    # first_n_pages = 75
+    # page_score_threshold = 1
+    # min_pages = 30
+    # max_selected_pages = 10
+    # max_adjacent_pages = 2
+    # refinement_attempts = 0
+
 
     # --- Sharepoint ---
     sharepoint_link = "https://connect2dll.sharepoint.com/:b:/r/sites/Grp-FinancialSpreading/Shared%20Documents/General/5.%20Input%20data"

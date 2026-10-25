@@ -13,6 +13,7 @@ from nodes.source_language import source_language
 from nodes.select_pages import select_pages
 from nodes.connect_llm import connect_llm
 from nodes.answer_questions import answer_questions
+from nodes.confidence_refinement import confidence_refinement
 from nodes.create_excel_output import create_excel_output
 
 def complete(state: FinancialGraphState) -> dict:
@@ -36,6 +37,7 @@ def build_graph():
     workflow.add_node("select_pages", select_pages)
     workflow.add_node("connect_llm", connect_llm)
     workflow.add_node("answer_questions", answer_questions)
+    workflow.add_node("confidence_refinement",confidence_refinement)
     workflow.add_node("create_excel_output", create_excel_output)
     workflow.add_node("complete", complete)
 
@@ -47,7 +49,9 @@ def build_graph():
     workflow.add_edge("source_language", "select_pages")
     workflow.add_edge("select_pages", "connect_llm")
     workflow.add_edge("connect_llm", "answer_questions")
-    workflow.add_edge("answer_questions", "create_excel_output")
+    # workflow.add_edge("answer_questions", "create_excel_output")
+    workflow.add_edge("answer_questions","confidence_refinement")
+    workflow.add_edge("confidence_refinement","create_excel_output")
     workflow.add_edge("create_excel_output", "complete")
     # workflow.add_edge("ingest_documents", "load_document")
     # workflow.add_edge("load_document", "parse_document")

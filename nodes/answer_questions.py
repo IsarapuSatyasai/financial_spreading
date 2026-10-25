@@ -22,14 +22,122 @@ def build_hyperlink(page_number: Optional[int], source_link: str) -> str:
     return "N/A"
 
 
+def align_answers_to_template(
+    excel_data: List[Dict[str, Any]],
+    extracted_answers: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Align extracted answers with the existing Excel template metrics."""
+
+    answer_map = {
+        (
+            answer["worksheet"],
+            answer["variable"],
+        ): answer
+        for answer in extracted_answers
+        if (
+            answer["worksheet"],
+            answer["variable"],
+        ) in {
+            (
+                metric["worksheet"],
+                metric["variable"],
+            )
+            for metric in excel_data
+        }
+    }
+
+    final_answers = []
+
+    for metric in excel_data:
+        key = (
+            metric["worksheet"],
+            metric["variable"],
+        )
+
+        answer = answer_map.get(key)
+
+        if answer is None:
+            answer = {
+                "worksheet": metric["worksheet"],
+                "variable": metric["variable"],
+                "answer": "N/A",
+                "confidence": 0.0,
+                "page_number": -1,
+                "source_fields": [],
+                "formula": None,
+                "source_link": "N/A",
+            }
+
+        final_answers.append(answer)
+
+    return final_answers
+
+
+def validate_template_alignment(
+    excel_data: List[Dict[str, Any]],
+    answers: List[Dict[str, Any]],
+) -> None:
+    """Validate that final answers exactly match template metrics."""
+
+    template_keys = {
+        (
+            metric["worksheet"],
+            metric["variable"],
+        )
+        for metric in excel_data
+    }
+
+    answer_keys = {
+        (
+            answer["worksheet"],
+            answer["variable"],
+        )
+        for answer in answers
+    }
+
+    if template_keys != answer_keys:
+        missing_metrics = template_keys - answer_keys
+        new_metrics = answer_keys - template_keys
+
+        raise ValueError(
+            f"Template alignment failed. "
+            f"Missing metrics: {missing_metrics}. "
+            f"New metrics: {new_metrics}."
+        )
+
+    if len(excel_data) != len(answers):
+        raise ValueError(
+            f"Metric count mismatch. "
+            f"Template: {len(excel_data)}, "
+            f"Answers: {len(answers)}."
+        )
+
+
+
 def answer_questions(state: FinancialGraphState) -> dict:
     """Extract metrics via LLM and enrich each answer with an Excel hyperlink."""
+
+    excel_data = state.get("excel_data", [])
+    errors = list(state.get("errors", []))
+    selected_pages = state.get("selected_pages", [])
+
+    if not selected_pages:
+        final_answers = align_answers_to_template(
+            excel_data,
+            [],
+        )
+
+        return {
+            "original_answers": final_answers,
+            "answers": final_answers,
+            "errors": errors + [
+                "Extraction skipped because no template-relevant pages were selected."
+            ],
+        }
+
     llm = state.get("llm")
     structured_llm = llm.with_structured_output(ExtractionResponse)
 
-    excel_data = state.get("excel_data", [])
-    errors = state.get("errors", [])
-    selected_pages = state.get("selected_pages", [])
     pdf_file_name = state.get("pdf_file_name", "")
   
     settings = get_settings()
@@ -38,19 +146,31 @@ def answer_questions(state: FinancialGraphState) -> dict:
 
     USER_PROMPT = get_user_prompt(excel_data)
     
+    # full_context = "\n\n".join(
+    #     [f"--- Page {i+1} ---\n{page.get('text', '')}" for i, page in enumerate(selected_pages)]
+    # )
+    
     full_context = "\n\n".join(
-        [f"--- Page {i+1} ---\n{page.get('text', '')}" for i, page in enumerate(selected_pages)]
+        [
+            f"--- PDF Page {page.get('page_number', i + 1)} ---\n"
+            f"{page.get('text', '')}"
+            for i, page in enumerate(selected_pages)
+        ]
     )
 
     # user_content = (
     #     f"Please extract the following variables:\n{USER_PROMPT}\n\n"
     #     f"Document context:\n{full_context}\n\n"
     # )
-    user_content = (
-    f"Please extract the following variables for every year present in the document:\n{USER_PROMPT}\n\n"
-    f"Document context:\n{full_context}\n\n"
-    )
 
+    user_content = (
+        f"Please extract the following variables:\n{USER_PROMPT}\n\n"
+        "Use only the supplied document context. "
+        "For page_number, return the physical PDF page number shown "
+        "in the context header. Do not use the selected-page position "
+        "or context order as the page number.\n\n"
+        f"Document context:\n{full_context}\n\n"
+    )
     messages = [
         SystemMessage(content=SYSTEM_PROMPT), 
         HumanMessage(content=user_content)
@@ -58,27 +178,48 @@ def answer_questions(state: FinancialGraphState) -> dict:
     
     try:
         response: ExtractionResponse = structured_llm.invoke(messages)
-        
+
         if errors:
             response.errors.extend(errors)
-            
-        final_answers = []
-        
+
+        extracted_answers = []
+
         for answer in response.answers:
-            answer.source_link = build_hyperlink(answer.page_number, source_link)
-            final_answers.append(answer.model_dump())
-            
+            answer.source_link = build_hyperlink(
+                answer.page_number,
+                source_link,
+            )
+            extracted_answers.append(answer.model_dump())
+
+        final_answers = align_answers_to_template(
+            excel_data,
+            extracted_answers,
+        )
+
+        validate_template_alignment(
+            excel_data,
+            final_answers,
+        )
+
         return {
-            "answers": final_answers, 
-            "errors": response.errors
+            "original_answers": final_answers,
+            "answers": final_answers,
+            "errors": response.errors,
         }
-        
-    except Exception as e:
-        error_msg = f"Bulk LLM extraction error: {str(e)}"
+
+    except Exception as exc:
+        error_msg = f"Bulk LLM extraction error: {exc}"
         errors.append(error_msg)
+
+        final_answers = align_answers_to_template(
+            excel_data,
+            [],
+        )
+
         return {
-            "answers": [],
-            "errors": errors
+            "original_answers": final_answers,
+            "answers": final_answers,
+            "errors": errors,
         }
 
 # from typing import List, Optional
