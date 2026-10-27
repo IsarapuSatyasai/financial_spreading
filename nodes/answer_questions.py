@@ -5,13 +5,15 @@ data point from the PDF context and added source hyperlink.
 """
 
 from typing import List, Dict, Any, Optional
+from collections import Counter, defaultdict
+import re
+
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from graph.graph_state import FinancialGraphState
 from prompts.system_prompt import SYSTEM_PROMPT
 from prompts.user_prompt import get_user_prompt
-from models import ExtractionResponse
-
+from models import MultiYearExtractionResponse
 from config import get_settings
 
 
@@ -113,242 +115,148 @@ def validate_template_alignment(
         )
 
 
+def detect_years(selected_pages: List[Dict[str, Any]]) -> List[int]:
+    candidates = Counter()
+
+    for page in selected_pages:
+        text = page.get("text", "") or ""
+        lower = text.lower()
+
+        if not any(
+            k in lower
+            for k in [
+                "consolidated statement of comprehensive income",
+                "consolidated balance sheet",
+                "for the years ended",
+                "as at december 31",
+            ]
+        ):
+            continue
+
+        for match in re.finditer(
+            r"(?:december 31,\s*|years ended\s+|as at\s+)(20[1-3]\d)(?:\s*(?:and|,)\s*(20[1-3]\d))?",
+            text,
+            re.IGNORECASE,
+        ):
+            candidates[int(match.group(1))] += 1
+            if match.group(2):
+                candidates[int(match.group(2))] += 1
+
+    if not candidates:
+        return []
+
+    top = [y for y, _ in candidates.most_common(2)]
+    return sorted(top, reverse=True)
+
 
 def answer_questions(state: FinancialGraphState) -> dict:
-    """Extract metrics via LLM and enrich each answer with an Excel hyperlink."""
-
     excel_data = state.get("excel_data", [])
     errors = list(state.get("errors", []))
     selected_pages = state.get("selected_pages", [])
 
     if not selected_pages:
-        final_answers = align_answers_to_template(
-            excel_data,
-            [],
-        )
-
+        empty = align_answers_to_template(excel_data, [])
         return {
-            "original_answers": final_answers,
-            "answers": final_answers,
+            "original_answers": empty,
+            "answers": empty,
+            "answers_by_year": {},
+            "years": [],
             "errors": errors + [
                 "Extraction skipped because no template-relevant pages were selected."
             ],
         }
 
+    years = detect_years(selected_pages)
+    if not years:
+        years = [None]
+
     llm = state.get("llm")
-    structured_llm = llm.with_structured_output(ExtractionResponse)
+    structured_llm = llm.with_structured_output(MultiYearExtractionResponse)
 
     pdf_file_name = state.get("pdf_file_name", "")
-  
     settings = get_settings()
     source_link = settings.sharepoint_link + pdf_file_name.replace(" ", "%20")
 
-
     USER_PROMPT = get_user_prompt(excel_data)
-    
-    # full_context = "\n\n".join(
-    #     [f"--- Page {i+1} ---\n{page.get('text', '')}" for i, page in enumerate(selected_pages)]
-    # )
-    
+
     full_context = "\n\n".join(
         [
-            f"--- PDF Page {page.get('page_number', i + 1)} ---\n"
-            f"{page.get('text', '')}"
+            f"--- PDF Page {page.get('page_number', i + 1)} ---\n{page.get('text', '')}"
             for i, page in enumerate(selected_pages)
         ]
     )
 
-    # user_content = (
-    #     f"Please extract the following variables:\n{USER_PROMPT}\n\n"
-    #     f"Document context:\n{full_context}\n\n"
-    # )
+    year_instruction = (
+        f"Extract every variable only for these years: {years}. "
+        "Do not include any other years. "
+        "Return one answer object per variable per year. "
+        "Include the year field on every answer. "
+        "Return numeric answers exactly as they appear in the source document, including thousand separators (e.g. 13,950). Do not remove commas or convert to plain integers."
+        if years != [None]
+        else "Extract the most recent period available. "
+            "Return numeric answers exactly as they appear in the source document, including thousand separators."
+    )
 
     user_content = (
         f"Please extract the following variables:\n{USER_PROMPT}\n\n"
+        f"{year_instruction}\n\n"
         "Use only the supplied document context. "
-        "For page_number, return the physical PDF page number shown "
-        "in the context header. Do not use the selected-page position "
-        "or context order as the page number.\n\n"
+        "For page_number, return the physical PDF page number shown in the context header.\n\n"
         f"Document context:\n{full_context}\n\n"
     )
+
     messages = [
-        SystemMessage(content=SYSTEM_PROMPT), 
-        HumanMessage(content=user_content)
+        SystemMessage(content=SYSTEM_PROMPT),
+        HumanMessage(content=user_content),
     ]
-    
+
     try:
-        response: ExtractionResponse = structured_llm.invoke(messages)
+        response: MultiYearExtractionResponse = structured_llm.invoke(messages)
 
         if errors:
             response.errors.extend(errors)
 
-        extracted_answers = []
+        answers_by_year = defaultdict(list)
 
         for answer in response.answers:
+            if years != [None] and answer.year not in years:
+                continue
+
             answer.source_link = build_hyperlink(
                 answer.page_number,
                 source_link,
             )
-            extracted_answers.append(answer.model_dump())
+            year_key = answer.year if answer.year is not None else years[0]
+            answers_by_year[year_key].append(answer.model_dump())
 
-        final_answers = align_answers_to_template(
-            excel_data,
-            extracted_answers,
-        )
+        aligned_by_year = {}
+        for year, year_answers in answers_by_year.items():
+            aligned = align_answers_to_template(excel_data, year_answers)
+            validate_template_alignment(excel_data, aligned)
+            aligned_by_year[year] = aligned
 
-        validate_template_alignment(
-            excel_data,
-            final_answers,
+        latest = years[0] if years and years[0] is not None else next(iter(aligned_by_year), None)
+        latest_answers = aligned_by_year.get(
+            latest,
+            align_answers_to_template(excel_data, []),
         )
 
         return {
-            "original_answers": final_answers,
-            "answers": final_answers,
+            "years": [y for y in years if y is not None],
+            "answers_by_year": aligned_by_year,
+            "original_answers": latest_answers,
+            "answers": latest_answers,
             "errors": response.errors,
         }
 
     except Exception as exc:
         error_msg = f"Bulk LLM extraction error: {exc}"
         errors.append(error_msg)
-
-        final_answers = align_answers_to_template(
-            excel_data,
-            [],
-        )
-
+        empty = align_answers_to_template(excel_data, [])
         return {
-            "original_answers": final_answers,
-            "answers": final_answers,
+            "original_answers": empty,
+            "answers": empty,
+            "answers_by_year": {},
+            "years": [],
             "errors": errors,
         }
-
-# from typing import List, Optional
-# from pydantic import BaseModel, Field
-# from langchain_core.messages import HumanMessage, SystemMessage
-
-# from graph.graph_state import FinancialGraphState
-
-# from prompts.system_prompt import SYSTEM_PROMPT
-# from prompts.user_prompt import get_user_prompt
-# from models import ExtractionResponse
-
-
-# def answer_questions(state: FinancialGraphState) -> ExtractionResponse:
-#     """Use the LLM to answer each question from the Excel template.
-
-#     For each row:
-#     - Constructs a prompt with the PDF context and the specific question
-#     - Sends to LLM for extraction
-#     - Collects the answer
-#     """
-#     llm = state.get("llm")
-#     # Invoke LLM with Structured Output
-#     structured_llm = llm.with_structured_output(ExtractionResponse)
-
-#     excel_data = state.get("excel_data", [])
-#     # pdf_pages = state.get("pdf_pages", [])
-#     errors = state.get("errors", [])
-#     selected_pages = state.get("selected_pages", [])
-
-#     USER_PROMPT = get_user_prompt(excel_data)
-    
-#     # Prepare Document Context
-#     full_context = "\n\n".join(
-#         [f"--- Page {i+1} ---\n{page.get('text', '')}" for i, page in enumerate(selected_pages)]
-#     )
-
-#     user_content = (
-#         f"Please extract the following variables:\n{USER_PROMPT}\n\n"
-#         f"Document context:\n{full_context}"
-#     )
-
-#     messages = [
-#         SystemMessage(content=SYSTEM_PROMPT), 
-#         HumanMessage(content=user_content)
-#         ]
-    
-#     try:
-#         response: ExtractionResponse = structured_llm.invoke(messages)
-        
-#         # Merge any existing errors with new ones if they occurred
-#         if errors:
-#             response.errors.extend(errors)
-            
-#         return response
-        
-#     except Exception as e:
-#         errors.append(f"Bulk LLM extraction error: {str(e)}")
-#         return ExtractionResponse(errors=errors)
-
-
-
-# SYSTEM_PROMPT = (
-#     "You are an intelligent financial assistant helping credit teams analyze "
-#     "and extract valuable insights from annual reports of companies. "
-#     "Extract the requested financial data point from the provided document context. "
-#     "If the information is not available in the document, respond with 'N/A'. "
-#     "Be precise and provide only the requested value without additional explanation."
-# )
-
-
-# def answer_questions(state: FinancialGraphState) -> ExtractionResponse:
-#     """Use the LLM to answer each question from the Excel template.
-
-#     For each row:
-#     - Constructs a prompt with the PDF context and the specific question
-#     - Sends to LLM for extraction
-#     - Collects the answer
-#     """
-#     llm = state.get("llm")
-#     excel_data = state.get("excel_data", [])
-#     pdf_pages = state.get("pdf_pages", [])
-#     errors = state.get("errors", [])
-
-    
-#     if llm is None:
-#         errors.append("LLM not available")
-#         return ExtractionResponse(errors=errors)
-#     if not pdf_pages:
-#         errors.append("No PDF content available")
-#         return ExtractionResponse(errors=errors)
-#     if not excel_data:
-#         errors.append("No questions from Excel")
-#         return ExtractionResponse(errors=errors)
-
-    
-#     full_context = "\n\n".join(
-#         [f"--- Page {i+1} ---\n{page.get('text', '')}" for i, page in enumerate(pdf_pages)]
-#     )
-
-#     system_msg = SystemMessage(content=SYSTEM_PROMPT)
-#     answers = []
-
-#     for item in excel_data:
-#         variable = item["variable"]
-#         description = item.get("description") or ""
-#         worksheet = item["worksheet"]
-
-#         question = f"From the following document, extract the value for: {variable}"
-#         if description:
-#             question += f"\nDescription: {description}"
-#         question += f"\n\nDocument context:\n{full_context}"
-
-#         try:
-#             response = llm.invoke([system_msg, HumanMessage(content=question)])
-#             answer_text = response.content.strip()
-#         except Exception as e:
-#             answer_text = f"ERROR: {str(e)}"
-#             errors.append(f"LLM error for '{variable}': {str(e)}")
-
-        
-#         answers.append(
-#             ExtractedAnswer(
-#                 worksheet=worksheet,
-#                 variable=variable,
-#                 description=description,
-#                 answer=answer_text,
-#             )
-#         )
-
-    
-#     return ExtractionResponse(answers=answers, errors=errors)

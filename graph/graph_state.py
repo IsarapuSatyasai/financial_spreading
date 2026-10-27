@@ -79,6 +79,12 @@ class FinancialGraphState(TypedDict, total=False):
     #Extracted metrics for each Excel row
     answers: List[Dict[str, Any]]
 
+    # Detected comparative years
+    years: List[int]
+
+    # Answers keyed by year
+    answers_by_year: Dict[int, List[Dict[str, Any]]]
+
 
     # #*************Output******************
 

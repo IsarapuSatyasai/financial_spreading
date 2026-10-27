@@ -13,6 +13,7 @@ class ExtractedAnswer(BaseModel):
     variable: str = Field(
         description="The name of the variable being extracted"
     )
+    year: Optional[int] = Field(default=None, description="Financial year this answer applies to")
     answer: str = Field(
         description="The extracted value as given in the source document, or 'N/A' if not found"
     )
@@ -96,6 +97,11 @@ class RefinementResponse(BaseModel):
     errors: List[str] = Field(
         default_factory=list
     )
+
+class MultiYearExtractionResponse(BaseModel):
+    years: List[int] = Field(default_factory=list)
+    answers: List[ExtractedAnswer] = Field(default_factory=list)
+    errors: List[str] = Field(default_factory=list)    
 
 # class ValidationResult(BaseModel):
 #     method: str = Field(description="Name of the validation method.")
