@@ -116,35 +116,83 @@ def validate_template_alignment(
 
 
 def detect_years(selected_pages: List[Dict[str, Any]]) -> List[int]:
+    """Detect fiscal years from any PDF format.
+
+    Handles annual reports, CreditLens summaries, and other layouts.
+    Ignores preparation and print dates so they are not treated as fiscal years.
+    """
     candidates = Counter()
+
+    year_patterns = [
+        # "December 31, 2024" / "December 31 2024"
+        r"(?:december|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?)\s+\d{1,2},?\s*(20[1-3]\d)",
+        # "12/31/2024" / "31/12/2024" / "2024-12-31"
+        r"(?:^|\s)(?:\d{1,2}[/-]\d{1,2}[/-]|20[1-3]\d[/-]\d{1,2}[/-])(20[1-3]\d)",
+        # "years ended 2024" / "year ended 2024"
+        r"(?:years?|period)\s+ended\s+(20[1-3]\d)",
+        # "as at 2024" / "as of 2024"
+        r"(?:as\s+(?:at|of))\s+(20[1-3]\d)",
+        # Standalone 4-digit years near financial context
+        r"\b(20[1-3]\d)\b",
+    ]
+
+    financial_context = [
+        "balance sheet",
+        "income statement",
+        "cash flow",
+        "statement of",
+        "financial",
+        "assets",
+        "liabilities",
+        "revenue",
+        "net income",
+        "total assets",
+        "summary",
+        "creditlens",
+        "rabodet",
+        "statement date",
+    ]
+
+    # Context that indicates a non-fiscal year (preparation, print, generation)
+    ignore_context = [
+        "prepared:",
+        "prepared ",
+        "printed:",
+        "print date",
+        "generated:",
+        "generated ",
+        "exported:",
+        "exported ",
+    ]
 
     for page in selected_pages:
         text = page.get("text", "") or ""
         lower = text.lower()
 
-        if not any(
-            k in lower
-            for k in [
-                "consolidated statement of comprehensive income",
-                "consolidated balance sheet",
-                "for the years ended",
-                "as at december 31",
-            ]
-        ):
+        # Skip pages with no financial signal
+        if not any(ctx in lower for ctx in financial_context):
             continue
 
-        for match in re.finditer(
-            r"(?:december 31,\s*|years ended\s+|as at\s+)(20[1-3]\d)(?:\s*(?:and|,)\s*(20[1-3]\d))?",
-            text,
-            re.IGNORECASE,
-        ):
-            candidates[int(match.group(1))] += 1
-            if match.group(2):
-                candidates[int(match.group(2))] += 1
+        for pattern in year_patterns:
+            for match in re.finditer(pattern, text, re.IGNORECASE):
+                year = int(match.group(1))
+                if not (2010 <= year <= 2035):
+                    continue
+
+                # Check surrounding text for ignore context
+                start = max(0, match.start() - 40)
+                end = min(len(lower), match.end() + 10)
+                nearby = lower[start:end]
+
+                if any(ctx in nearby for ctx in ignore_context):
+                    continue
+
+                candidates[year] += 1
 
     if not candidates:
         return []
 
+    # Return the two most common years, newest first
     top = [y for y, _ in candidates.most_common(2)]
     return sorted(top, reverse=True)
 
