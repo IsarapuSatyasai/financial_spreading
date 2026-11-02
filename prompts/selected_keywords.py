@@ -95,6 +95,19 @@ FINANCIAL_TERMS = [
     "dividends",
     "financial liabilities",
     "financial assets",
+    "total labor costs",
+    "staff costs",
+    "employee benefits",
+    "personnel expenses",
+    "other expenses",
+    "other operating expenses",
+    "administrative expenses",
+    "general and administrative expenses",
+    "interest received",
+    "interest income",
+    "finance income",
+    "income from other financial assets",
+    "other financial income",
 ]
 
 STRONG_FINANCIAL_TERMS = [
@@ -345,6 +358,29 @@ METRIC_SYNONYM_GROUPS = [
     (
         "capital expenditure",
         "capex",
+    ),
+    (
+        "salaries",
+        "other labour costs",
+        "total labour costs",
+        "staff costs",
+        "employee benefits",
+    ),
+    (
+        "general costs",
+        "other expenses",
+        "other operating expenses",
+        "administrative expenses",
+    ),
+    (
+        "interest received",
+        "interest income",
+        "finance income",
+    ),
+    (
+        "income from other finan assets",
+        "income from other financial assets",
+        "other financial income",
     ),
 ]
 

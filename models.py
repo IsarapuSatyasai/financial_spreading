@@ -35,6 +35,14 @@ class ExtractedAnswer(BaseModel):
         default="N/A",
         description="Hyperlink formula pointing to the source PDF page. Populated post-extraction."
     )
+    source_heading: Optional[str] = Field(
+        default=None,
+        description="The section, table, or paragraph heading where the value was found in the PDF."
+    )
+    source_text: Optional[str] = Field(
+        default=None,
+        description="The complete relevant paragraph or full table from the PDF that contains the extracted value, including surrounding context for verification."
+    )
 
 
 class ExtractionResponse(BaseModel):
@@ -101,13 +109,4 @@ class RefinementResponse(BaseModel):
 class MultiYearExtractionResponse(BaseModel):
     years: List[int] = Field(default_factory=list)
     answers: List[ExtractedAnswer] = Field(default_factory=list)
-    errors: List[str] = Field(default_factory=list)    
-
-# class ValidationResult(BaseModel):
-#     method: str = Field(description="Name of the validation method.")
-#     formula: Optional[str] = Field(None, description="Formula used for validation.")
-#     expected_value: Optional[float] = Field(None, description="Expected value of the validation.")
-#     actual_value: Optional[float] = Field(None, description="Actual value of the validation.")
-#     passed: bool = Field(..., description="Whether the validation passed or failed.")
-#     severity: str = Field("info", description="Severity level of the validation, such as 'info', 'warning', or 'error'.")
-#     message: str = Field(..., description="Message describing the validation result to a real human in easy understandable language.")
+    errors: List[str] = Field(default_factory=list)

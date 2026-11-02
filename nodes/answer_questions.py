@@ -68,6 +68,8 @@ def align_answers_to_template(
                 "source_fields": [],
                 "formula": None,
                 "source_link": "N/A",
+                "source_heading": None,
+                "source_text": None,
             }
 
         final_answers.append(answer)

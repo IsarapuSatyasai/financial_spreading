@@ -57,6 +57,12 @@ def align_answers_to_template(
                     "source_link",
                     "N/A",
                 ),
+                "source_heading": answer.get(
+                    "source_heading",
+                ),
+                "source_text": answer.get(
+                    "source_text",
+                ),
             }
         )
 
@@ -368,6 +374,8 @@ def create_excel_output(
             row[f"{prefix}source_fields"] = match.get("source_fields", [])
             row[f"{prefix}formula"] = match.get("formula")
             row[f"{prefix}source_link"] = match.get("source_link", "N/A")
+            row[f"{prefix}source_heading"] = match.get("source_heading")
+            row[f"{prefix}source_text"] = match.get("source_text")
 
         worksheet_dict.setdefault(
             worksheet,
