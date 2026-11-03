@@ -1,17 +1,27 @@
-ltu_europe_financial_analysis_prompts_dict = {
-    "General": """
-    Identify and extract the additional information for all years:
+ltu_europe_financial_analysis_prompts_list = [
+    {
+        "title": "Financial performance realised and projected",
+        "question": """
+    Instruction:
+    Extract the required fields from the input.
+    Also include predefined constant fields exactly as specified.
+
+    Rules:
+    - Only extract values for fields that contain placeholders in parentheses.
+    - Do NOT infer, modify, or rephrase any constant fields.
+    - Always include constant fields in the output exactly as written.
+
+    Output fields:
+    Extract the following:
     - Financial analysis of: (Company Name)
     - Qualified or unqualified: (Qualification Status)
-    - Source: (Origination System of input)
-    - Dates: (All relevant statement dates covering all reporting periods)
     - Consolidated or non-consolidated: (Consolidation Status)
-    - Amounts printed in: (Units, e.g., Thousands) 
-    - Currency: (Target currency, e.g., EUR)
-    - Key figures values (the table below) expressed in: Millions
-    - MFA ID: (MFA ID)
+
     """,
-    "Key figures": """
+    },
+    {
+        "title": "Financial performance realised and projected$Key figures (x EUR mln)",
+        "question": """
     Output a single Markdown table with YEARS AS ROWS (never as columns). The first column must be **Year**; all other columns are fixed metric names listed below. Return ONLY the table—no titles, notes, or commentary.
 
     TABLE STRUCTURE
@@ -42,7 +52,9 @@ ltu_europe_financial_analysis_prompts_dict = {
     - Convert units if the source uses thousands, billions, etc. (e.g., 1,200,000 → 1.2; 2.3B → 2,300).
     - Preserve sign for negatives **except for Financing Payment**, which must always show its **absolute value**.
     - Use standard number formatting without currency symbols.
-    - Recommended rounding: one decimal place for monetary values (e.g., 123.4).
+    - Use comma thousands separators (e.g., 12,345 or 1,234.5).
+    - Round to at most one decimal place.
+    - Remove trailing zeros and trailing decimal points.
 
     PERCENTAGES & RATIOS
     - For percentage columns (**Gross income %**, **Sustainable EBITDA %**, **NW / Total Assets**), display values with a **%** sign, rounded to one decimal (e.g., 12.3%).
@@ -57,7 +69,10 @@ ltu_europe_financial_analysis_prompts_dict = {
     TASK
     Populate the extracted values into the Markdown table format described above, ensuring each metric aligns to its respective year, ordered from oldest to latest, leaving blanks where data is unavailable.
     """,
-    "Profitability": """Use ONLY the provided standardized income statement (P&L) figures for the most recent two fiscal years (no external assumptions, no peer benchmarks, no invented causes). If any required P&L anchor line (Revenue/Sales, Operating Profit/EBIT, Net Profit) is missing, state that the assessment is constrained.
+    },
+    {
+        "title": "Financial performance realised and projected$Profitability",
+        "question": """Use ONLY the provided standardized income statement (P&L) figures for the most recent two fiscal years (no external assumptions, no peer benchmarks, no invented causes). If any required P&L anchor line (Revenue/Sales, Operating Profit/EBIT, Net Profit) is missing, state that the assessment is constrained.
 
     Task: Produce ONE concise, insight-dense paragraph (150–180 words) analyzing profitability across the two most recent fiscal years. Prioritize interpretation and judgment over description. Do NOT provide a line-by-line P&L walkthrough.
 
@@ -94,7 +109,10 @@ ltu_europe_financial_analysis_prompts_dict = {
     - Avoid long year-by-year numeric strings; if you must quantify, keep to one level + YoY % change OR one delta + YoY %, not multiple comparisons.
     - Do not invent explanations; if the statements do not specify drivers, state the limitation briefly and proceed with judgment based on observed movements.
     """,
-    "Liquidity / Cash Flow": """
+    },
+    {
+        "title": "Financial performance realised and projected$Liquidity / Cash Flow",
+        "question": """
     Use ONLY the provided standardized financial statement figures for the most recent two fiscal years (no external assumptions, no industry averages, no invented drivers). If any required cash flow section or Cash & Bank balance is missing, state that the assessment is constrained.
 
     Task: Write ONE insight-dense paragraph (150–180 words) assessing liquidity and cash flow performance across the two most recent fiscal years. Prioritize interpretation and judgment over description. Do NOT narrate individual cash flow line items.
@@ -122,7 +140,10 @@ ltu_europe_financial_analysis_prompts_dict = {
     - No parenthetical numeric comparisons.
     - End with a clear categorical judgment: “Debt service capacity: Strong/Adequate/Weak; Liquidity: Strong/Adequate/Weak.
     """,
-    "Solvency": """Use ONLY the provided standardized balance sheet and debt metrics for the most recent two fiscal years (no external assumptions, no peer benchmarks, no invented causes). If any required anchor metric (Risk-bearing capital, Total assets, Long-term interest-bearing debt, Cash & equivalents or debt, EBITDA if debt/EBITDA is provided) is missing, state that the assessment is constrained.
+    },
+    {
+        "title": "Financial performance realised and projected$Solvency",
+        "question": """Use ONLY the provided standardized balance sheet and debt metrics for the most recent two fiscal years (no external assumptions, no peer benchmarks, no invented causes). If any required anchor metric (Risk-bearing capital, Total assets, Long-term interest-bearing debt, Cash & equivalents or debt, EBITDA if debt/EBITDA is provided) is missing, state that the assessment is constrained.
 
     Task: Produce ONE concise, insight-dense paragraph (150–180 words) analyzing solvency across the two most recent fiscal years. Prioritize interpretation and credit judgment over description. Do NOT provide a line-by-line balance sheet walkthrough.
 
@@ -164,91 +185,5 @@ ltu_europe_financial_analysis_prompts_dict = {
     - Do not invent explanations; if the statements do not specify drivers, state the limitation briefly and proceed with judgment based on observed movements.
     - Do not include ratio breakdown sections; only reference the named solvency ratios minimally when essential.
     """,
-}
-
-ltu_europe_financial_analysis_prompts_dict_additional = {
-    "Profitability (additional insights from the annual report)": """
-    **Instructions:**  
-    Analyze and summarize **revenue, COGS, and profit** using the following structure:  
-
-    1. **Introduction**  
-    - Briefly summarize the company’s industry, core business model, and key financial metrics (e.g., gross margin, operating margin, net margin trends over 3–5 years).  
-
-    2. **Revenue Analysis**  
-    - Key drivers of revenue change (e.g., product lines, volumes, demand, geographic markets, pricing strategies, impact of market price, acquisitions, disposals of group companies), indlucing specific years.  
-
-    3. **Cost of Goods Sold (COGS) Analysis**  
-    - Key drivers of COGS change (e.g.,  raw materials, prices, inflation, exchange effects, supply chain), indlucing specific years.
-
-    4. **Profit Analysis**   
-    - Analyse the Figures that lead to the result/net profit and highlight the significant changes. 
-
-    5. **Key Takeaways**  
-    - Strengths (e.g., revenue growth outpacing COGS rise).  
-    - Weaknesses (e.g., shrinking margins due to cost inflation).  
-    - Critical risks or opportunities (e.g., dependency on a single revenue stream).  
-
-    Only use consolidated figures. If a specific example is provided, incorporate its details only if relevant data is available; otherwise, omit any mention of the example. Prioritize and base your analysis on the information provided in the notes to the consolidated financial statements, whenever available.
-    """,
-    "Liquidity / Cash Flow (additional insights from the annual report)": """
-    **Instructions:**  
-    Analyze and summarize **Operating cash flow, cash from investments, cash flow from financing, used credit facility, unused credit facilities** indlucing specific years and using the following structure:  
-
-    1. **Operating cash flow (OCF)**  
-    - How much cash does the company generate through the operating cash flow?
-    - Hom much cash (on the balance sheet) does the company has per year end and what is the net cash?
-    - Has the company access to cash? This can be via capital increase, unused credit facilities, additional debts, if for example the net debts/EBITDA ratio is low the company is more likely to be able to lend extra money which might not be the case is net debt/EBITDA ratio is high)
- 
-    2. **Cash from Investing Activities**  
-    - Discuss the impact of these activities on liquidity and long-term operational capacity, indlucing specific years.  
-
-    3. **Cash Flow from Financing Activities**  
-    - Identify sources/uses (e.g., debt issuance/repayment, equity transactions, dividends), indlucing specific years.  
-    - Assess reliance on external financing to fund operations or growth.  
-    - Note any dividend policies or share buybacks affecting liquidity.  
-
-    4. **Credit Facilities:**  
-    - **Used Credit Facility:** Quantify drawn amounts, repayment terms, and interest obligations. Evaluate reliance on credit for liquidity needs.  
-    - **Unused Credit Facility:** Determine remaining availability, covenant compliance, and flexibility to address unexpected cash shortfalls.  
-
-    5. **Payment Capacity**
-    - Calculate Payment Capacity by using the formular (Net income / profit after tax / comprehensive income / net profit / net loss/result) + interest payments+depreciation+amortization - (Liabilities to banks/5) for all years. 
-
-    **Overall Liquidity / Cash flow Assessment**  
-    - Highlight interconnections between components (e.g., OCF funding investments vs. debt dependency).  
-    - Identify strengths (e.g. strong cash conversion cycle, conservative leverage, diversified funding sources).
-    - Identify risks or red flags (e.g., Negative OCF, shrinking cash reserves, rising debt/EBITDA).  
-    - Conclude with an overall liquidity risk assessment and recommendations to strengthen cash resilience (e.g., optimizing working capital, refinancing strategies).  
-
-    Only use consolidated figures. If a specific example is provided, incorporate its details only if relevant data is available; otherwise, omit any mention of the example. Prioritize and base your analysis on the information provided in the notes to the consolidated financial statements, whenever available.
-    """,
-    "Solvency (additional insights from the annual report)": """
-    **Instructions:**  
-    Assess the company's long-term solvency and ability to meet its debt obligations. Focus on **capital structure sustainability, debt repayment capacity, and risks to financial stability** indlucing specific years and using the following structure:  
-
-    1. **Instruction**  
-    Briefly summarize the company's industry (e.g., capital-intensive vs. asset-light), business model, and key solvency metrics (e.g., debt-to-equity ratio, interest coverage ratio, debt-to-EBITDA) over 3-5 years.  
-
-    2. **Debt Load Analysis**:
-    - **Debt-to-Equity Ratio** Is the company becoming overleveraged? Compare to industry peers.  
-    - **Debt-to-EBITDA** How many years of earnings are needed to repay debt? A ratio >4x often signals risk.  
-
-    3. **Cash Flow Adequacy**  
-    - **Free Cash Flow to Debt (FCF/Debt):** Can free cash flow reduce debt?  
-
-    4. **External & Strategic Factors**  
-    - **Industry Risks** Are there any industry risk. 
-    - **Management Strategy** Summarize Management Strategy.
-    - Dividend policies: Are payouts draining cash needed for debt repayment?  
-
-    5. **Synthesis:**  
-    - **Sustainability of Capital Structure**  
-        - Is debt growth outpacing earnings or cash flow?  
-        - Can the company generate sufficient EBITDA to deleverage?  
-    - **Red Flags vs. Strengths**  
-        - Red flags: Declining interest coverage, shrinking equity cushion, covenant breaches.  
-        - Strengths: Long debt maturities, strong FCF generation, conservative leverage ratios.  
-
-    Only use consolidated figures. If a specific example is provided, incorporate its details only if relevant data is available; otherwise, omit any mention of the example. Prioritize and base your analysis on the information provided in the notes to the consolidated financial statements, whenever available.
-    """,
-}
+    },
+]

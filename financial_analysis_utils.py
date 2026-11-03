@@ -3,37 +3,55 @@ import re
 
 def generate_final_response(_dir):
     """
-    Generates the final response by combining credit lens responses and annual report responses.
+    Generate the final ordered response.
+
+    CreditLens responses are used as the base output. If annual report
+    responses are available, the CreditLens sections "Profitability",
+    "Liquidity / Cash Flow", and "Solvency" are removed and replaced by the
+    corresponding annual report sections.
+
+    The resulting responses are ordered according to:
+    General, Key figures, Profitability, Liquidity / Cash Flow, Solvency.
 
     Args:
-        _dir (dict): A dictionary containing 'credit_lens_chain_responses' and 'annual_report_chain_responses'.
+        _dir (dict): Dictionary containing:
+            - credit_lens_chain_responses (list[dict])
+            - additional_report_chain_responses (list[dict] | None)
 
     Returns:
-        dict: A dictionary with keys ordered as specified in 'key_order'. If 'annual_report_chain_responses' is None,
-              returns 'credit_lens_chain_responses'. Otherwise, combines both responses, prioritizing 'credit_lens_chain_responses'
-              where available.
+        list[dict]: Final ordered response sections.
     """
-    key_order = [
-        "General",
-        "Key figures",
-        "Profitability",
-        "Profitability (additional insights from the annual report)",
-        "Liquidity / Cash Flow",
-        "Liquidity / Cash Flow (additional insights from the annual report)",
-        "Solvency",
-        "Solvency (additional insights from the annual report)",
+    order = [
+        "Financial performance realised and projected",
+        "Financial performance realised and projected$Key figures (x EUR mln)",
+        "Financial performance realised and projected$Profitability",
+        "Financial performance realised and projected$Liquidity / Cash Flow",
+        "Financial performance realised and projected$Solvency",
     ]
 
     credit_lens_responses = _dir["credit_lens_chain_responses"]
-    annual_report_responses = _dir["additional_report_chain_responses"]
+    annual_report_responses = _dir.get("additional_report_chain_responses") or []
 
-    if annual_report_responses is None:
-        final_response = credit_lens_responses
-    else:
-        final_response = {
-            key: credit_lens_responses.get(key, annual_report_responses.get(key))
-            for key in key_order
+    if annual_report_responses:
+        replace_titles = {
+            "Financial performance realised and projected$Profitability",
+            "Financial performance realised and projected$Liquidity / Cash Flow",
+            "Financial performance realised and projected$Solvency",
         }
+
+        credit_lens_responses = [
+            item
+            for item in credit_lens_responses
+            if item["title"] not in replace_titles
+        ]
+
+    combined = credit_lens_responses + annual_report_responses
+
+    order_map = {title: idx for idx, title in enumerate(order)}
+
+    final_response = sorted(
+        combined, key=lambda item: order_map.get(item["title"], len(order))
+    )
 
     return final_response
 
@@ -102,7 +120,7 @@ def remove_currency_block(contexts):
             elif not skip:
                 output_lines.append(line)
 
-            context["text"] = "\n".join(output_lines)
+        context["text"] = "\n".join(output_lines)
 
         cleaned_contexts.append(context)
 
